@@ -51,7 +51,7 @@ namespace IAEX
    * \author Anders Fernström
    * \date 2005-11-04
    *
-   * \brief Class of opening a dialog window for entering av value...
+   * \brief Class of opening a dialog window for entering a value...
    */
   class OtherDlg : public QDialog
   {
@@ -66,8 +66,7 @@ namespace IAEX
       minW.setNum( min_ );
       maxW.setNum( max_ );
 
-      QString text = QString("Enter value (") + minW +
-        QString("-") + maxW + QString(")");
+      QString text = tr("Enter value (%1-%2)").arg(minW).arg(maxW);
 
       ui.label->setText( text );
 

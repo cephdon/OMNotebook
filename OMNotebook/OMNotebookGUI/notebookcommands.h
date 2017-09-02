@@ -63,8 +63,8 @@
 #include "xmlparser.h"
 #include "inputcell.h"
 #include "graphcell.h"
+#include "latexcell.h"
 #include "cellgroup.h"
-#include "highlighterthread.h"
 #include <QDataStream>
 #include <QTextOption>
 
@@ -72,22 +72,6 @@ using namespace std;
 
 namespace IAEX
 {
-  /*!
-  * \class SleeperThread
-  * \author Anders Ferström
-  *
-  * \brief Extends QThread. A small trick to get access to protected
-  * function in QThread.
-  */
-  class SleeperThread : public QThread
-  {
-  public:
-    static void msleep(unsigned long msecs)
-    {
-      QThread::msleep(msecs);
-    }
-  };
-
   /*!
   * \class SaveDocumentCommand
   * \author Ingemar Axelsson and Anders Fernström
@@ -313,7 +297,6 @@ namespace IAEX
 
         PrinterVisitor visitor( printDocument, printer_ );
         doc_->runVisitor( visitor );
-        printDocument->setTextWidth(700);
 
         printDocument->print( printer_ );
 
@@ -483,6 +466,13 @@ namespace IAEX
         GraphCell *graphcell = dynamic_cast<GraphCell *>(cell);
         graphcell->eval();
       }
+
+      if( typeid( LatexCell ) == typeid( *cell ) )
+      {
+        LatexCell *latexcell = dynamic_cast<LatexCell *>(cell);
+        latexcell->eval();
+      }
+
       else if( typeid( CellGroup ) == typeid( *cell ) )
       {
         if( cell->hasChilds() )

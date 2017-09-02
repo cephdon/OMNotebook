@@ -50,8 +50,9 @@
 #include "application.h"
 #include "document.h"
 #include "documentview.h"
+#if USE_OMSKETCH
 #include "Tools.h"
-
+#endif
 //Forward declaration
 class QAction;
 class QActionGroup;
@@ -105,9 +106,12 @@ public slots:
   void setState(QString);
   void setStatusMenu(QList<QAction*>);
   void recentTriggered();
+  QVector<Cell*> SearchCells(Cell* current);  // Added 2015-07-14 To search the cells in a document and return the number of cells
+
 protected:
   void keyPressEvent(QKeyEvent *event);
   void keyReleaseEvent(QKeyEvent *event);
+  void SearchCells(Cell* current, QVector<Cell*> * total);
 
 private slots:
   void newFile();
@@ -121,6 +125,7 @@ private slots:
   void save();
   void quitOMNotebook();              // Added 2006-01-18 AF
   void print();                  // Added 2005-12-19 AF
+  void pdf();                  // Added 2016-12-01 HK
   void selectFont();                // Added 2005-11-07 AF
   void changeStyle(QAction *action);
   void changeStyle();
@@ -149,9 +154,11 @@ private slots:
   void openOldFile();        // Added 2005-12-01 AF
   void pureText();        // Added 2005-11-21 AF
 
+#if USE_OMSKETCH
   void Sketch(); //Added by jhansi
   void sketchImageEdit();//Added by jhansi
   void viewSketchImageAttributes(); //Added by jhansi
+#endif
 
   void createNewCell();
   void deleteCurrentCell();
@@ -164,12 +171,17 @@ private slots:
   void moveCursorDown();
   void groupCellsAction();
   void inputCellsAction();
+  void latexCellsAction();
   void textCellsAction();
   void updateRecentFiles(QString);
 
   void indent();
   void setAutoIndent(bool);
   void eval();
+  void evalall();
+  void shiftcellsUp();
+  void shiftcellsDown();
+  void shiftselectedcells();
 private:
   void createFileMenu();
   void createEditMenu();
@@ -233,11 +245,18 @@ private:
   QAction *saveAsAction;
   QAction *saveAction;
   QAction *printAction;        // Added 2005-12-19 AF
+  QAction *pdfAction;
   QAction *closeFileAction;
   QAction *quitWindowAction;
   QAction *indentAction;
   QAction *autoIndentAction;
   QAction *evalAction;
+  QAction *evalallAction;
+  QAction *evalLatexAction;
+  QAction *shiftcellsupAction;
+  QAction *shiftcellsdownAction;
+  QAction *shiftselectedcellsAction;
+
 public:
   QAction *undoAction;
   QAction *redoAction;
@@ -261,6 +280,8 @@ private:
 
   QAction *groupAction;
   QAction *inputAction;
+  QAction *latexAction;
+
   QAction *textAction;
 
   QAction *aboutAction;
@@ -331,6 +352,7 @@ private:
   QAction *importOldFile;      // Added 2005-12-01 AF
   QAction *exportPureText;    // Added 2005-11-21 AF
 
+#if USE_OMSKETCH
   QAction *insertSketch;//Added by jhansi
   QAction *insertSketchImage;//Added by jhansi
   QAction *editSketchImage;//Added by jhansi
@@ -348,6 +370,7 @@ private:
 
   Tools *window;
   bool isShown;
+#endif
 
   // 2005-11-03/04/07 AF, Added for the new menus (for text changes)
   QHash<QString, QAction*> fonts_;
@@ -380,6 +403,7 @@ private:
   static QString linkDir_;  // Added 2006-03-01 AF
 
   QLabel* posIndicator, *stateIndicator;
+  QString err_hierarchy = tr("Cells cannot be moved inside or outside another hierarchy.");
 };
 }
 #endif

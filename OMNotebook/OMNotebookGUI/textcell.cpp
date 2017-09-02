@@ -46,6 +46,10 @@
 #include <stdexcept>
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtCore/QString>
 #include <QtGui/QAbstractTextDocumentLayout>
 #include <QtGui/QBrush>
@@ -58,6 +62,8 @@
 #include <QtGui/QResizeEvent>
 #include <QMessageBox>
 #include <QVariant>
+#endif
+
 
 //IAEX Headers
 #include "textcell.h"
@@ -90,7 +96,7 @@ namespace IAEX
    *
    * 2005-11-03 AF, Updated the function to reflect the changes made
    * in qt (from v3 to v4). The function now takes a QUrl as parameter
-   * insted of a QString (in qt3).
+   * instead of a QString (in qt3).
    */
   void MyTextBrowser::setSource(const QUrl &name)
   {
@@ -366,7 +372,13 @@ namespace IAEX
    */
   QString TextCell::textHtml()
   {
-    return text_->toHtml();
+    if (isViewExpression()) {
+      return text_->toPlainText();
+    }
+    else
+    {
+      return text_->toHtml();
+    }
   }
 
   /*!

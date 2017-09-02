@@ -1,5 +1,7 @@
 /build
 *.o
+*.qm
+qm.stamp
 OMNotebook/bin
 OMNotebook/generatedfiles
 OMNotebook/OMNotebookGUI/Makefile
@@ -19,3 +21,4 @@ config.status
 config.sub
 configure
 install-sh
+qmake.sh

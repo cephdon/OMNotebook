@@ -43,8 +43,12 @@
 
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QTextBrowser>
-
+#endif
 
 //IAEX Headers
 #include "cell.h"
@@ -78,7 +82,6 @@ namespace IAEX
     virtual void viewExpression(const bool expr);
 
   signals:
-    void heightChanged();
     void textChanged();
     void textChanged( bool );
     void hoverOverUrl( const QUrl &link );    // Added 2006-02-10 AF

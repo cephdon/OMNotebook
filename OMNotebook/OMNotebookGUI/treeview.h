@@ -36,11 +36,15 @@
 #ifndef TREEVIEW_H
 #define TREEVIEW_H
 
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QWidget>
 #include <QtGui/QPainter>
 #include <QtCore/QPoint>
-//Added by qt3to4:
 #include <QtGui/QPaintEvent>
+#endif
 
 namespace IAEX
 {
@@ -66,10 +70,10 @@ namespace IAEX
 
       const bool selected() const;
       const bool isClosed() const;
+
    public slots:
       void setClosed(const bool closed);
       void setSelected(const bool sel);
-
 
    protected:
       void paintEvent(QPaintEvent *event);
@@ -77,9 +81,6 @@ namespace IAEX
       //void mouseReleaseEvent(QMouseEvent *event);
       QColor selectedColor() const;
       QColor backgroundColor() const;
-
-   signals:
-      void becomeSelected(bool); //Deprecated
 
    private:
       bool selected_;

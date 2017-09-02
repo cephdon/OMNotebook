@@ -40,9 +40,13 @@
 #include <iostream>
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtCore>
-//#include <QtGui/QApplication>
 #include <QtGui/QMessageBox>
+#endif
 
 //IAEX Headers
 #include "notebook.h"
@@ -71,6 +75,9 @@ int main(int argc, char *argv[])
   getrlimit(RLIMIT_STACK, &limits);
   limits.rlim_cur = limits.rlim_max;
   setrlimit(RLIMIT_STACK, &limits);
+
+  // App path is not same as command line path, so add /Library/TeX/texbin and /usr/texbin for latex-cell support
+  qputenv("PATH", qgetenv("PATH") + ":/Library/TeX/texbin:/usr/texbin");
 #endif
 
   MMC_INIT();

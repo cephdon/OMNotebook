@@ -43,21 +43,23 @@
 
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QWidget>
 #include <QtGui/QTextBrowser>
-//Added by qt3to4:
 #include <QtGui/QMouseEvent>
 #include <QtGui/QGridLayout>
 #include <QtGui/QResizeEvent>
 #include <QtCore/QEvent>
+#endif
 
 //IAEX Headers
 #include "cell.h"
 #include "inputcelldelegate.h"
-#include "syntaxhighlighter.h"
-//#include "highlighter.h"
 #include "document.h"
-
+#include "ModelicaTextHighlighter.h"
 
 namespace IAEX
 {
@@ -88,7 +90,6 @@ namespace IAEX
     virtual bool isEvaluated();              // Added 2005-11-23 AF
 
   signals:
-    void heightChanged();
     void textChanged();
     void textChanged( bool );
     void clickedOutput( Cell* );          // Added 2006-02-03 AF
@@ -145,12 +146,12 @@ namespace IAEX
 
   public:
     QTextBrowser *input_;
+    ModelicaTextHighlighter *mpModelicaTextHighlighter;
     QTextBrowser *output_;
   private:
     QTextBrowser *chaptercounter_;
 
     InputCellDelegate *delegate_;
-    //SyntaxHighlighter *syntaxHighlighter_;
 
     QGridLayout *layout_;
     Document *document_;
@@ -166,8 +167,6 @@ namespace IAEX
   public:
     MyTextEdit(QWidget *parent=0);
     virtual ~MyTextEdit();
-
-    bool isStopingHighlighter();    // Added 2006-01-16 AF
 
   signals:
     void clickOnCell();          // Added 2005-11-01 AF
@@ -187,7 +186,6 @@ namespace IAEX
 
   private:
     bool inCommand;            // Added 2005-12-15 AF
-    bool stopHighlighter;        // Added 2006-01-16 AF
   };
 
 }

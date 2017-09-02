@@ -39,6 +39,10 @@
 #include <exception>
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QTextCursor>
 #include <QtGui/QTextDocumentFragment>
 #include <QtGui/QTextEdit>
@@ -46,12 +50,15 @@
 #include <QtGui/QTextTableCell>
 #include <QtGui/QTextTableFormat>
 #include <QPrinter>
+#endif
+#include "qwt_plot_renderer.h"
 
 //IAEX Headers
 #include "printervisitor.h"
 #include "cellgroup.h"
 #include "textcell.h"
 #include "inputcell.h"
+#include "latexcell.h"
 #include "cellcursor.h"
 #include "graphcell.h"
 
@@ -65,8 +72,8 @@ namespace IAEX
    * \class PrinterVisitor
    * \date 2005-12-19
    *
-   * \brief creates a new QTextDocument that contaions the documents
-   * enthier text
+   * \brief creates a new QTextDocument that contains the documents
+   * entire text
    */
 
   /*!
@@ -92,12 +99,13 @@ namespace IAEX
     QTextTableFormat tableFormat;
     tableFormat.setBorder( 0 );
     tableFormat.setColumns( 2 );
-    tableFormat.setCellPadding( 5 );
+    tableFormat.setCellPadding( 2 );
 
-    QVector<QTextLength> constraints;
-        constraints << QTextLength(QTextLength::FixedLength, 50)
-                    << QTextLength(QTextLength::VariableLength, 620);
-        tableFormat.setColumnWidthConstraints(constraints);
+    // do not put the constraints on the columns. If we don't have chapter numbers we want to use the full space.
+//    QVector<QTextLength> constraints;
+//        constraints << QTextLength(QTextLength::PercentageLength, 20)
+//                    << QTextLength(QTextLength::PercentageLength, 80);
+//        tableFormat.setColumnWidthConstraints(constraints);
 
     // insert the table
     QTextCursor cursor = printEditor_->textCursor();
@@ -176,7 +184,7 @@ namespace IAEX
           QTextTableFormat tableFormatExpression;
           tableFormatExpression.setBorder( 0 );
           tableFormatExpression.setColumns( 1 );
-          tableFormatExpression.setCellPadding( 5 );
+          tableFormatExpression.setCellPadding( 2 );
 //          tableFormatExpression.setBackground( QColor(235, 235, 220) ); // 180, 180, 180
           tableFormatExpression.setBackground( QColor(235, 0, 0) ); // 180, 180, 180
 
@@ -188,15 +196,24 @@ namespace IAEX
           // QMessageBox::information(0,"uu2", node->text());
 
           QString html = node->textHtml();
-          html += "<br><br>";
           cursor.insertFragment( QTextDocumentFragment::fromHtml( html ));
         }
         else
         {
           QString html = node->textHtml();
-          html += "<br><br>";
+
           html.remove( "file:///" );
-          QTextDocumentFragment frgmnt;
+          // in printed version link to other printed document
+          if (html.contains(".onb\">")) {
+            html.replace(".onb\">",".pdf\">");
+          }
+          if (html.contains(".onb#")) {
+            while (html.contains(".onb#")) {
+              int pos1 = html.indexOf(".onb#");
+              int pos2 = html.indexOf("\">", pos1);
+              html.replace(pos1, pos2-pos1, ".pdf");
+            }
+          }
           printEditor_->document()->setTextWidth(700);
           cursor.insertFragment(QTextDocumentFragment::fromHtml( html ));
           // QMessageBox::information(0, "uu3", node->text());
@@ -240,9 +257,8 @@ namespace IAEX
         // input table
         QTextTableFormat tableFormatInput;
         tableFormatInput.setBorder( 0 );
-        tableFormatInput.setMargin( 6 );
         tableFormatInput.setColumns( 1 );
-        tableFormatInput.setCellPadding( 8 );
+        tableFormatInput.setCellPadding( 2 );
         tableFormatInput.setBackground( QColor(245, 245, 255) ); // 200, 200, 255
 
         QVector<QTextLength> constraints;
@@ -252,9 +268,8 @@ namespace IAEX
 
         QString html = node->textHtml();
         // QMessageBox::information(0, "uu1", node->text());
-        html += "<br>";
         if( !node->isEvaluated() || node->isClosed() )
-          html += "<br>";
+          html += "<br />";
         cursor.insertFragment( QTextDocumentFragment::fromHtml( html ));
 
         // output table
@@ -262,9 +277,8 @@ namespace IAEX
         {
           QTextTableFormat tableFormatOutput;
           tableFormatOutput.setBorder( 0 );
-          tableFormatOutput.setMargin( 6 );
           tableFormatOutput.setColumns( 1 );
-          tableFormatOutput.setCellPadding( 8 );
+          tableFormatOutput.setCellPadding( 2 );
           QVector<QTextLength> constraints;
           constraints << QTextLength(QTextLength::PercentageLength, 100);
           tableFormatOutput.setColumnWidthConstraints(constraints);
@@ -273,8 +287,6 @@ namespace IAEX
           cursor.insertTable( 1, 1, tableFormatOutput );
 
           QString outputHtml( node->textOutputHtml() );
-          outputHtml += "<br><br>";
-
 
           outputHtml.remove( "file:///" );
                     cursor.insertFragment( QTextDocumentFragment::fromHtml( outputHtml ));
@@ -328,9 +340,8 @@ namespace IAEX
         // input table
         QTextTableFormat tableFormatInput;
         tableFormatInput.setBorder( 0 );
-        tableFormatInput.setMargin( 6 );
         tableFormatInput.setColumns( 1 );
-        tableFormatInput.setCellPadding( 8 );
+        tableFormatInput.setCellPadding( 2 );
         tableFormatInput.setBackground( QColor(245, 245, 255) ); // 200, 200, 255
         QVector<QTextLength> constraints;
         constraints << QTextLength(QTextLength::PercentageLength, 100);
@@ -338,18 +349,16 @@ namespace IAEX
         cursor.insertTable( 1, 1, tableFormatInput );
 
         QString html = node->textHtml();
-        html += "<br>";
         if( !node->isEvaluated() || node->isClosed() )
-          html += "<br>";
+          html += "<br />";
         cursor.insertFragment( QTextDocumentFragment::fromHtml( html ));
 
         if( node->isEvaluated() && !node->isClosed() )
         {
           QTextTableFormat tableFormatOutput;
           tableFormatOutput.setBorder( 0 );
-          tableFormatOutput.setMargin( 6 );
           tableFormatOutput.setColumns( 1 );
-          tableFormatOutput.setCellPadding( 8 );
+          tableFormatOutput.setCellPadding( 2 );
           QVector<QTextLength> constraints;
           constraints << QTextLength(QTextLength::PercentageLength, 100);
           tableFormatOutput.setColumnWidthConstraints(constraints);
@@ -358,8 +367,120 @@ namespace IAEX
           cursor.insertTable( 1, 1, tableFormatOutput );
 
           QString outputHtml( node->textOutputHtml() );
-          outputHtml += "<br><br>";
 
+          outputHtml.remove( "file:///" );
+          cursor.insertFragment( QTextDocumentFragment::fromHtml( outputHtml ));
+        }
+
+      }
+      // print the plot
+      if (node->mpPlotWindow && node->mpPlotWindow->isVisible()) {
+        ++currentTableRow_;
+        table_->insertRows( currentTableRow_, 1 );
+
+        // first column
+        tableCell = table_->cellAt( currentTableRow_, 1 );
+        if( tableCell.isValid() )
+        {
+          QTextCursor cursor( tableCell.firstCursorPosition() );
+
+          // input table
+          QTextTableFormat tableFormatInput;
+          tableFormatInput.setBorder( 0 );
+          tableFormatInput.setColumns( 1 );
+          tableFormatInput.setCellPadding( 2 );
+          QVector<QTextLength> constraints;
+          constraints << QTextLength(QTextLength::PercentageLength, 100);
+                  tableFormatInput.setColumnWidthConstraints(constraints);
+          cursor.insertTable( 1, 1, tableFormatInput );
+
+          OMPlot::Plot *pPlot = node->mpPlotWindow->getPlot();
+          // calculate height for width while preserving aspect ratio.
+          int width, height;
+          if (pPlot->size().width() > 600) {
+            width = 600;
+            qreal ratio = (double)pPlot->size().height() / pPlot->size().width();
+            height = width * qCeil(ratio);
+          } else {
+            width = pPlot->size().width();
+            height = pPlot->size().height();
+          }
+          // create a pixmap and render the plot on it
+          QPixmap plotPixmap(width, height);
+          QwtPlotRenderer plotRenderer;
+          plotRenderer.renderTo(pPlot, plotPixmap);
+          // insert the pixmap to table
+          cursor.insertImage(plotPixmap.toImage());
+        }
+      }
+
+      if( firstChild_ )
+        firstChild_ = false;
+    }
+  }
+
+
+  void PrinterVisitor::visitGraphCellNodeAfter(GraphCell *)
+  {}
+
+  // LATEXCELL
+
+  void PrinterVisitor::visitLatexCellNodeBefore(LatexCell *node)
+  {
+    if( !ignore_ || firstChild_ )
+    {
+
+      ++currentTableRow_;
+      table_->insertRows( currentTableRow_, 1 );
+
+      // first column
+      QTextTableCell tableCell( table_->cellAt( currentTableRow_, 0 ) );
+      if( tableCell.isValid() )
+      {
+        if( !node->ChapterCounterHtml().isNull() )
+        {
+          QTextCursor cursor( tableCell.firstCursorPosition() );
+          cursor.insertFragment( QTextDocumentFragment::fromHtml(
+            node->ChapterCounterHtml() ));
+        }
+      }
+
+      // second column
+      tableCell = table_->cellAt( currentTableRow_, 1 );
+      if( tableCell.isValid() )
+      {
+        QTextCursor cursor( tableCell.firstCursorPosition() );
+
+        // input table
+        QTextTableFormat tableFormatInput;
+        tableFormatInput.setBorder( 0 );
+        tableFormatInput.setColumns( 1 );
+        tableFormatInput.setCellPadding( 2 );
+        tableFormatInput.setBackground( QColor(245, 245, 255) ); // 200, 200, 255
+        QVector<QTextLength> constraints;
+        constraints << QTextLength(QTextLength::PercentageLength, 100);
+                tableFormatInput.setColumnWidthConstraints(constraints);
+        cursor.insertTable( 1, 1, tableFormatInput );
+
+        QString html = node->textHtml();
+        if( !node->isEvaluated() || node->isClosed() )
+          html += "<br />";
+        cursor.insertFragment( QTextDocumentFragment::fromHtml( html ));
+
+        if( node->isEvaluated() && !node->isClosed() )
+        {
+          QTextTableFormat tableFormatOutput;
+          tableFormatOutput.setBorder( 0 );
+          tableFormatOutput.setColumns( 1 );
+          tableFormatOutput.setCellPadding( 2 );
+          QVector<QTextLength> constraints;
+          constraints << QTextLength(QTextLength::PercentageLength, 100);
+          tableFormatOutput.setColumnWidthConstraints(constraints);
+
+          cursor = tableCell.lastCursorPosition();
+          cursor.insertTable( 1, 1, tableFormatOutput );
+
+          QString outputHtml( node->textOutputHtml() );
 
           outputHtml.remove( "file:///" );
           cursor.insertFragment( QTextDocumentFragment::fromHtml( outputHtml ));
@@ -371,9 +492,9 @@ namespace IAEX
         firstChild_ = false;
     }
   }
-
-  void PrinterVisitor::visitGraphCellNodeAfter(GraphCell *)
+  void PrinterVisitor::visitLatexCellNodeAfter(LatexCell *)
   {}
+
 
   //CELLCURSOR
   void PrinterVisitor::visitCellCursorNodeBefore(CellCursor *)

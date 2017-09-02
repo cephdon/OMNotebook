@@ -46,6 +46,10 @@
 #include <algorithm>
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtCore/QDir>
 #include <QtCore/QEvent>
 #include <QtCore/QFileInfo>
@@ -54,6 +58,7 @@
 #include <QtGui/QImageWriter>
 #include <QtGui/QScrollArea>
 #include <QtGui/QScrollBar>
+#endif
 
 //IAEX Headers
 #include "celldocument.h"
@@ -181,7 +186,7 @@ namespace IAEX
     delete factory_;
 
     // 2006-01-16 AF (update), remove all images in memory and add
-    // the temporary images to removelist in the main applicaiton
+    // the temporary images to removelist in the main application
     QHash<QString, QImage*>::iterator i_iter = images_.begin();
     while( i_iter != images_.end() )
     {
@@ -388,11 +393,11 @@ namespace IAEX
   void CellDocument::cursorDeleteCell()
   {
     executeCommand(new DeleteSelectedCellsCommand());
-    qDebug("cursorDeleteCell");
+    //qDebug("cursorDeleteCell");
 
     //emit cursorChanged(); //This causes an untracable segfault.
 
-    qDebug("Finished");
+    //qDebug("Finished");
   }
 
   /*!
@@ -661,7 +666,7 @@ namespace IAEX
 
     // save the image temporary to the harddrive
     QImageWriter writer( name, "png" );
-    writer.setDescription( "Temporary OMNotebook image" );
+    writer.setDescription( tr("Temporary OMNotebook image") );
     writer.setQuality( 100 );
     writer.write( *image );
 
@@ -696,7 +701,7 @@ namespace IAEX
       image = images_[name];
     else
     {
-      cout << "Could not find image: " << name.toStdString() << endl;
+      //cout << "Could not find image: " << name.toStdString() << endl;
       image = new QImage();
     }
 
@@ -823,7 +828,7 @@ namespace IAEX
           // TO BIG
           if( height > (scrollBottom-scrollTop) )
           {
-            qDebug( "TO BIG" );
+            qDebug( "TOO BIG" );
             // cell so big that it span over entire viewarea
             return;
           }
@@ -849,7 +854,7 @@ namespace IAEX
               pos = 0;
 
             // set new scrollvalue
-            cout << "UP: old(" << scroll_->verticalScrollBar()->value() << "), new(" << pos << ")" << endl;
+            //cout << "UP: old(" << scroll_->verticalScrollBar()->value() << "), new(" << pos << ")" << endl;
             scroll_->verticalScrollBar()->setValue( pos );
           }
           // DOWN
@@ -940,6 +945,7 @@ namespace IAEX
    */
   void CellDocument::mouseClickedOnCell(Cell *clickedCell)
   {
+
     // 2006-04-25, AF
     if( lastClickedCell_ == clickedCell )
       return;
@@ -971,10 +977,27 @@ namespace IAEX
       getCursor()->moveAfter(clickedCell); //Results in bus error why?
     }
 
+   if( typeid(LatexCell) == typeid(*clickedCell))
+    {
+     LatexCell *latexcell = dynamic_cast<LatexCell*>(clickedCell);
+     bool r =latexcell->isEvaluated();
+     if(r==true)
+     {
+       latexcell->input_->setReadOnly(true);
+       latexcell->setFocus(true);
+     }
+     else
+     {
+       latexcell->input_->setReadOnly(false);
+     }
+    }
+    else
+    {
     clickedCell->setReadOnly(false);
     clickedCell->setFocus(true);
-
+      }
     emit cursorChanged();
+
   }
 
   /*!
@@ -1021,6 +1044,21 @@ namespace IAEX
       graphcell->setFocusOutput(true);
     }
 
+    else if(typeid(LatexCell) == typeid(*clickedCell))
+    {
+      LatexCell *latexcell = dynamic_cast<LatexCell*>(clickedCell);
+      //latexcell->setReadOnly(false);
+      latexcell->setFocusOutput(true);
+      latexcell->output_->setReadOnly(false);
+     /* QString text=latexcell->textOutput();
+      if(!text.isEmpty())
+      {
+          latexcell->output_->hide();
+          latexcell->input_->show();
+          latexcell->hideButton->show();
+      } */
+    }
+
     else
     {
       clickedCell->setReadOnly(false);
@@ -1043,8 +1081,8 @@ namespace IAEX
 //  void CellDocument::anchorClicked(const QUrl *link)
   {
     // 2006-02-10 AF, check if path is empty
-    fprintf(stderr, "received link: %s\n", link->toString().toStdString().c_str());
-    fflush(stderr); fflush(stdout);
+    //fprintf(stderr, "received link: %s\n", link->toString().toStdString().c_str());
+    //fflush(stderr); fflush(stdout);
     if( !link->path().isEmpty() )
     {
       // 2005-12-05 AF, check if filename exists, otherwise use work dir
@@ -1433,4 +1471,3 @@ namespace IAEX
 
 
 };
-

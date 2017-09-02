@@ -94,7 +94,7 @@ void Indent::ISM::newToken(QString s, QString s2)
       lMod = true;
       break;
     }
-    else if(s == "class" || s == "package" || s == "function" || s == "model" || s == "record" || s == "connector")
+    else if(s == "class" || s == "package" || s == "function" || s == "model" || s == "block" || s == "record" || s == "connector")
     {
       ++level;
       skipNext = true;
@@ -368,7 +368,7 @@ QString Indent::indentedText(QMap<int, IndentationState*>* states)
 {
   buffer1 = buffer1.replace('\n', " <newLine> ") + " <newLine> " + " <newLine> ";
   buffer1 = buffer1.replace("//", " //");
-  buffer1 = buffer1.replace("=", " = ");
+  buffer1 = buffer1.replace(QRegExp("(==|:=|<=|>=|=)"), " \\1 ");
   QTextStream ts(&buffer1, QIODevice::ReadWrite);
 
   //QString current, next, comment;
@@ -451,8 +451,6 @@ QString Indent::indentedText(QMap<int, IndentationState*>* states)
       else
         res = res + "\n"  + QString(2*ism.level -2*ism.lMod, ' ')   +tmp   + current.trimmed()  +  QString(newline-1, '\n'); //QString(tmp.size()?1:0, ' ') + current.trimmed();
       //      res = res + "\n"  + QString(2*ism.level -2*ism.lMod, ' ')   +tmp   + current.trimmed()  + QString(comment.size()?1:0,'\n') + QString(newline-1, '\n'); //QString(tmp.size()?1:0, ' ') + current.trimmed();
-
-
       //      res = res + "\n" + QString(2*4 -2*2, '#') + tmp + QString(tmp.size()?0:1, ' ') + current;
       comment = "";
       tmp = "";
@@ -470,14 +468,9 @@ QString Indent::indentedText(QMap<int, IndentationState*>* states)
         (*states)[N] = new IndentationState(ism.state, ism.level, ism.nextMod, current, next, ism.skipNext, ism.lMod, ism.equation, ism.equationSection, ism.loopBlock);
       }
     }
-    else
+    else {
       tmp +=  current.trimmed() +  QString(current.size()?1:0, ' ') ;
-
-
+    }
   }
-
-
-
   return res.trimmed();
-
 }

@@ -45,6 +45,10 @@
 #include <sstream>
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtCore/QDir>
 #include <QtCore/QEvent>
 #include <QtCore/QThread>
@@ -58,37 +62,17 @@
 #include <QtGui/QResizeEvent>
 #include <QtGui/QFrame>
 #include <QtGui/QTextFrame>
+#endif
 
 //IAEX Headers
 #include "inputcell.h"
 #include "treeview.h"
 #include "stylesheet.h"
 #include "commandcompletion.h"
-#include "highlighterthread.h"
 #include "omcinteractiveenvironment.h"
-
-
 
 namespace IAEX
 {
-  /*!
-   * \class SleeperThread
-   * \author Anders Ferström
-   *
-   * \brief Extends QThread. A small trick to get access to protected
-   * function in QThread.
-   */
-  class SleeperThread : public QThread
-  {
-  public:
-    static void msleep(unsigned long msecs)
-    {
-      QThread::msleep(msecs);
-    }
-  };
-
-
-
   /*!
    * \class MyTextEdit
    * \author Anders Ferström
@@ -99,18 +83,12 @@ namespace IAEX
    */
   MyTextEdit::MyTextEdit(QWidget *parent)
     : QTextBrowser(parent),
-    inCommand(false),
-    stopHighlighter(false)
+    inCommand(false)
   {
   }
 
   MyTextEdit::~MyTextEdit()
   {
-  }
-
-  bool MyTextEdit::isStopingHighlighter()
-  {
-    return stopHighlighter;
   }
 
   /*!
@@ -126,7 +104,6 @@ namespace IAEX
    */
   void MyTextEdit::mousePressEvent(QMouseEvent *event)
   {
-    stopHighlighter = false;
     inCommand = false;
     QTextBrowser::mousePressEvent(event);
 
@@ -172,7 +149,6 @@ namespace IAEX
       (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->accept();
       emit eval();
@@ -181,7 +157,6 @@ namespace IAEX
     else if( (event->modifiers() == Qt::ShiftModifier && event->key() == Qt::Key_Backtab ) ||
       (event->modifiers() == Qt::ControlModifier && event->key() == Qt::Key_Space) )
     {
-      stopHighlighter = false;
 
       event->accept();
       if( inCommand )
@@ -198,7 +173,6 @@ namespace IAEX
     else if( event->modifiers() == Qt::ControlModifier &&
       event->key() == Qt::Key_Tab )
     {
-      stopHighlighter = false;
 
       event->accept();
       inCommand = false;
@@ -209,7 +183,6 @@ namespace IAEX
       event->key() == Qt::Key_Delete )
     {
       inCommand = false;
-      stopHighlighter = true;
 
       QTextBrowser::keyPressEvent( event );
     }
@@ -218,7 +191,6 @@ namespace IAEX
       ( event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return ))
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
     }
@@ -226,7 +198,6 @@ namespace IAEX
     else if( event->key() == Qt::Key_PageUp )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
     }
@@ -234,7 +205,6 @@ namespace IAEX
     else if( event->key() == Qt::Key_PageDown )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
     }
@@ -243,7 +213,6 @@ namespace IAEX
       event->key() == Qt::Key_C )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
       emit forwardAction( 1 );
@@ -253,7 +222,6 @@ namespace IAEX
       event->key() == Qt::Key_X )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
       emit forwardAction( 2 );
@@ -263,7 +231,6 @@ namespace IAEX
       event->key() == Qt::Key_V )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
       emit forwardAction( 3 );
@@ -273,14 +240,12 @@ namespace IAEX
     else if( event->key() == Qt::Key_Tab )
     {
       inCommand = false;
-      stopHighlighter = false;
 
             textCursor().insertText( "  " );
     }
     else
     {
       inCommand = false;
-      stopHighlighter = false;
 
       QTextBrowser::keyPressEvent( event );
     }
@@ -370,30 +335,8 @@ namespace IAEX
    */
   InputCell::~InputCell()
   {
-    //2006-01-05 AF, check if input texteditor is in the highlighter,
-    //if it is - wait for 60 ms and check again.
-    HighlighterThread *thread = HighlighterThread::instance();
-    int sleepTime = 0;
-    bool firstTime = true;
-    while( thread->haveEditor( input_ ) )
-    {
-      if( firstTime )
-      {
-        thread->removeEditor( input_ );
-        firstTime = false;
-      }
-
-      SleeperThread::msleep( 60 );
-      sleepTime++;
-
-      if( sleepTime > 100 )
-        break;
-    }
-
-
     delete input_;
     delete output_;
-    //delete syntaxHighlighter_;
   }
 
   /*!
@@ -414,6 +357,7 @@ namespace IAEX
   void InputCell::createInputCell()
   {
     input_ = new MyTextEdit( mainWidget() );
+    mpModelicaTextHighlighter = new ModelicaTextHighlighter(input_->document());
     layout_->addWidget( input_, 1, 1 );
 
     // 2006-03-02 AF, Add a chapter counter
@@ -529,8 +473,7 @@ namespace IAEX
     else
     {
       // 2006-01-30 AF, add message box
-      QString msg = "No Output style defened, please define a Output style in stylesheet.xml";
-      QMessageBox::warning( 0, "Warning", msg, "OK" );
+      QMessageBox::warning( 0, tr("Warning"), tr("No Output style defined, please define an Output style in stylesheet.xml"), "OK" );
     }
 
     QTextCursor cursor = output_->textCursor();
@@ -1130,9 +1073,8 @@ namespace IAEX
       // 2006-02-17 AF, set text '{evaluation expression}" during
       // evaluation of expressiuon
       output_->selectAll();
-      output_->textCursor().insertText( "{evaluating expression}" );
+      output_->textCursor().insertText( tr("{evaluating expression}") );
       setOutputStyle();
-      //output_->setPlainText( "{evaluating expression}" );
       output_->update();
       QCoreApplication::processEvents();
       delegate()->evalExpression(expr);
@@ -1203,7 +1145,6 @@ namespace IAEX
    */
   void InputCell::nextCommand()
   {
-    qDebug("Next Command");
     CommandCompletion *commandcompletion = CommandCompletion::instance( "commands.xml" );
     QTextCursor cursor = input_->textCursor();
 
@@ -1219,7 +1160,6 @@ namespace IAEX
    */
   void InputCell::nextField()
   {
-    qDebug("Next Field");
     CommandCompletion *commandcompletion = CommandCompletion::instance( "commands.xml" );
     QTextCursor cursor = input_->textCursor();
 
@@ -1240,18 +1180,6 @@ namespace IAEX
   void InputCell::addToHighlighter()
   {
     emit textChanged(true);
-
-    if( input_->toPlainText().isEmpty() )
-      return;
-
-    // 2006-01-16 AF, Don't add the text editor if mytextedit
-    // don't allow it. mytextedit says no if the user removes
-    // text (backspace or delete).
-    if( dynamic_cast<MyTextEdit *>(input_)->isStopingHighlighter() )
-      return;
-
-    HighlighterThread *thread = HighlighterThread::instance();
-    thread->addEditor( input_ );
   }
 
   /*!
@@ -1304,14 +1232,6 @@ namespace IAEX
   }
 
 
-
-
-
-
-
-
-
-
   /*! \brief Do not use this member.
   *
   * This is an ugly part of the cell structure.
@@ -1327,7 +1247,6 @@ namespace IAEX
   void InputCell::removeCellWidgets()
   {
     /*
-    // PORT >> layout_->remove(input_);
     if(evaluated_)
       layout_->remove(output_);
       */
@@ -1346,7 +1265,6 @@ namespace IAEX
     {
       output_->clear();
       evaluated_ = false;
-      // PORT >> layout_->remove(output_);
       layout_->removeWidget(output_);
     }
 
@@ -1369,15 +1287,8 @@ namespace IAEX
     Cell::resizeEvent(event);
   }
 
-
-
-
-
-
-
   void InputCell::mouseDoubleClickEvent(QMouseEvent *)
   {
-    // PORT >>if(treeView()->hasMouse())
     if(treeView()->testAttribute(Qt::WA_UnderMouse))
     {
       setClosed(!closed_);

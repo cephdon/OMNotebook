@@ -32,12 +32,6 @@
 
 #define RUN_DRMODELICA_CONVERTION    false
 
-//QT Headers
-#include <QtCore/QDir>
-//#include <QtCore/QObject>
-#include <QtGui/QImageWriter>
-#include <QtGui/QMessageBox>
-
 //IAEX Headers
 #include "cellapplication.h"
 #include "celldocument.h"
@@ -48,12 +42,14 @@
 #include "omcinteractiveenvironment.h"
 #include "updategroupcellvisitor.h"
 #include "commandcompletion.h"
-#include "highlighterthread.h"
 #include "stylesheet.h"
 #include "inputcell.h"
 #include "notebookcommands.h"
+#include <QSplashScreen>
 
 #include <cstdlib>
+
+#include "omc_config.h"
 
 namespace IAEX
 {
@@ -90,14 +86,63 @@ namespace IAEX
 
     // ******************************************************
 
+    class MyApp : public QApplication {
+    private:
+      CellApplication * ca = NULL;
+      public:
+        MyApp(int& argc, char**argv, CellApplication * c): QApplication(argc, argv)
+        {ca = c;}
+        bool event(QEvent *event) {
+          switch(event->type())
+          {
+            case QEvent::FileOpen:
+            {
+              QFileOpenEvent * fileOpenEvent = static_cast<QFileOpenEvent *>(event);
+              if(fileOpenEvent) {
+                ca->FileOpenEventTriggered = true;
+                ca->open(fileOpenEvent->file());
+
+                return true;
+              }
+            }
+            default:
+              return QApplication::event(event);
+          }
+        }
+    };
+
   CellApplication::CellApplication( int &argc, char *argv[] )
     : QObject()
   {
-    app_ = new QApplication(argc, argv);
+    app_ = new MyApp(argc, argv, this);
+
+
+    const char *omhome = getenv("OPENMODELICAHOME");
+  #ifdef WIN32
+    if (!omhome) {
+      QMessageBox::critical(0, tr("Error"), tr("OPENMODELICAHOME not set"), "OK");
+      app_->quit();
+      exit(1);
+    }
+  #else /* unix */
+    omhome = omhome ? omhome : CONFIG_DEFAULT_OPENMODELICAHOME;
+  #endif
+    QString translationDirectory = omhome + QString("/share/omnotebook/nls");
+    // install Qt's default translations
+  #ifdef Q_OS_WIN
+    qtTranslator.load("qt_" + QLocale::system().name(), translationDirectory);
+  #else
+    qtTranslator.load("qt_" + QLocale::system().name(), QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+  #endif
+    app_->installTranslator(&qtTranslator);
+    // install application translations
+    translator.load("OMNotebook_" + QLocale::system().name(), translationDirectory);
+    app_->installTranslator(&translator);
+
     mainWindow = new QMainWindow();
     QDir dir;
 
-    // when last window closed, the applicaiton should quit also
+    // when last window closed, the application should quit also
     QObject::connect(app_, SIGNAL(lastWindowClosed()), app_, SLOT(quit()));
 
     //Create a commandCenter.
@@ -111,7 +156,7 @@ namespace IAEX
 
     if(!QDir().exists(openmodelica))
     {
-      QMessageBox::critical( 0, "OpenModelica Error", "The environment variable OPENMODELICAHOME="+openmodelica+" is not a valid directory" );
+      QMessageBox::critical( 0, "OpenModelica Error", tr("The environment variable OPENMODELICAHOME=%1 is not a valid directory").arg(openmodelica) );
       exit(1);
     }
 
@@ -119,23 +164,22 @@ namespace IAEX
     OmcInteractiveEnvironment *env = OmcInteractiveEnvironment::getInstance();
     env->evalExpression("setCommandLineOptions(\"+d=shortOutput\")");
     QString cmdLine = env->getResult();
-    cout << "Set shortOutput flag: " << cmdLine.toStdString() << std::endl;
+    //cout << "Set shortOutput flag: " << cmdLine.toStdString() << std::endl;
     QString tmpDir = OmcInteractiveEnvironment::TmpPath();
     if (!QDir().exists(tmpDir)) QDir().mkdir(tmpDir);
     tmpDir = QDir(tmpDir).canonicalPath();
-    cout << "Temp.Dir " << tmpDir.toStdString() << std::endl;
+    //cout << "Temp.Dir " << tmpDir.toStdString() << std::endl;
     QString cdCmd = "cd(\"" + tmpDir + "\")";
     env->evalExpression(cdCmd);
     QString cdRes = env->getResult();
     cdRes.remove("\"");
     if (0 != tmpDir.compare(cdRes)) {
-      QMessageBox::critical( 0, "OpenModelica Error", "Could not create or cd to temp-dir\nCommand:\n  "+tmpDir+"\nReturned:\n  "+cdRes);
+      QMessageBox::critical( 0, "OpenModelica Error", tr("Could not create or cd to temp-dir\nCommand:\n  %1\nReturned:\n  %2").arg(tmpDir).arg(cdRes));
       exit(1);
     }
 
     // 2005-12-17 AF, Create instance (load styles) of stylesheet
     // 2006-04-10 AF, use environment variable to find stylesheet.xml
-    Stylesheet *sheet;
     try
     {
       QString stylesheetfile;
@@ -144,11 +188,11 @@ namespace IAEX
       else
         stylesheetfile = openmodelica + "/share/omnotebook/stylesheet.xml";
 
-      sheet = Stylesheet::instance( stylesheetfile );
+      Stylesheet::instance( stylesheetfile );
     }
     catch( exception &e )
     {
-      QMessageBox::warning( 0, "Error", e.what(), "OK" );
+      QMessageBox::warning( 0, tr("Error"), e.what(), "OK" );
       exit(-1);
     }
 
@@ -168,7 +212,7 @@ namespace IAEX
     {
       QString msg = e.what();
       msg += "\nCould not create command completion class, exiting OMNotebook";
-      QMessageBox::warning( 0, "Error", msg, "OK" );
+      QMessageBox::warning( 0, tr("Error"), msg, "OK" );
       std::exit(-1);
     }
 
@@ -181,35 +225,6 @@ namespace IAEX
     }
     else
     {
-      // 2006-01-09 AF, create a new highlight thread with the
-      // 'openmodelicahighlighter' as the highlighter that should be
-      // used.
-      // 2006-04-10 AF, use environment variable to find modelicacolors.xml
-      try
-      {
-        Stylesheet *sheet = Stylesheet::instance( "stylesheet.xml" );
-        CellStyle style = sheet->getStyle( "Input" );
-        style.textCharFormat()->setBackground( QBrush( QColor( 200, 200, 255 ) ));
-
-        QString modelicacolorsfile;
-        if( openmodelica.endsWith("/") || openmodelica.endsWith( "\\") )
-          modelicacolorsfile = openmodelica + "share/omnotebook/modelicacolors.xml";
-        else
-          modelicacolorsfile = openmodelica + "/share/omnotebook/modelicacolors.xml";
-
-        OpenModelicaHighlighter *highlighter = new OpenModelicaHighlighter( modelicacolorsfile, *style.textCharFormat() );
-        HighlighterThread *thread = HighlighterThread::instance( highlighter );
-        //thread->start( QThread::LowPriority );
-      }
-      catch( exception &e )
-      {
-        QString msg = e.what();
-        msg += "\nCould not create highlighter thread, exiting OMNotebook";
-        QMessageBox::warning( 0, "Error", msg, "OK" );
-        std::exit(-1);
-      }
-
-
       // second arg is a file that should be opened.
       if( argc > 1 )
       {
@@ -226,32 +241,44 @@ namespace IAEX
       }
       else
       {
-        // 2006-02-27 AF, use environment variable to find DrModelica
-        // 2006-03-24 AF, First try to find DrModelica.onb, then .nb
-        QString drmodelica = OmcInteractiveEnvironment::OpenModelicaHome() + "/share/omnotebook/drmodelica/DrModelica.onb";
-        //QString drmodelica = OmcInteractiveEnvironment::OpenModelicaHome() + "/share/omnotebook/drmodelica/QuickTour/HelloWorld.onb";
+        QIcon icon(":/Resources/OMNotebook_icon.svg");
+        QSplashScreen splash(icon.pixmap(300,400));
+        splash.show();
+        app_->processEvents();
+        splash.finish(mainWindow);
+        if (FileOpenEventTriggered)
+        {
 
-        if( dir.exists( drmodelica ))
-          open(drmodelica);
-        else if( dir.exists( "DrModelica/DrModelica.onb" ))
-          open( "DrModelica/DrModelica.onb" );
+        }
         else
         {
-          cout << "Unable to find (1): " << drmodelica.toStdString() << endl;
-          cout << "Unable to find (2): DrModelica/DrModelica.onb" << endl;
-
-          // NB
-          drmodelica = OmcInteractiveEnvironment::OpenModelicaHome() + "/share/omnotebook/drmodelica/DrModelica.onb";
+          // 2006-02-27 AF, use environment variable to find DrModelica
+          // 2006-03-24 AF, First try to find DrModelica.onb, then .nb
+          QString drmodelica = OmcInteractiveEnvironment::OpenModelicaHome() + "/share/omnotebook/drmodelica/DrModelica.onb";
+          //QString drmodelica = OmcInteractiveEnvironment::OpenModelicaHome() + "/share/omnotebook/drmodelica/QuickTour/HelloWorld.onb";
 
           if( dir.exists( drmodelica ))
             open(drmodelica);
-          else if( dir.exists( "DrModelica/DrModelica.nb" ))
-            open( "DrModelica/DrModelica.nb" );
+          else if( dir.exists( "DrModelica/DrModelica.onb" ))
+            open( "DrModelica/DrModelica.onb" );
           else
           {
-            cout << "Unable to find (3): " << drmodelica.toStdString() << endl;
-            cout << "Unable to find (4): DrModelica/DrModelica.nb" << endl;
-            open(QString::null);
+            cout << "Unable to find (1): " << drmodelica.toStdString() << endl;
+            cout << "Unable to find (2): DrModelica/DrModelica.onb" << endl;
+
+            // NB
+            drmodelica = OmcInteractiveEnvironment::OpenModelicaHome() + "/share/omnotebook/drmodelica/DrModelica.onb";
+
+            if( dir.exists( drmodelica ))
+              open(drmodelica);
+            else if( dir.exists( "DrModelica/DrModelica.nb" ))
+              open( "DrModelica/DrModelica.nb" );
+            else
+            {
+              cout << "Unable to find (3): " << drmodelica.toStdString() << endl;
+              cout << "Unable to find (4): DrModelica/DrModelica.nb" << endl;
+              open(QString::null);
+            }
           }
         }
       }
@@ -276,10 +303,6 @@ namespace IAEX
    */
   CellApplication::~CellApplication()
   {
-    // 2005-12-19 AF, stop highlighter thread
-    HighlighterThread *thread = HighlighterThread::instance();
-    thread->exit();
-
     // 2006-02-09 AF, moved code for quiting omc to the notebook windos
 
     // 2006-01-16 AF, remove temporary files
@@ -288,8 +311,7 @@ namespace IAEX
     {
       if( !dir.remove( removeList_.at(i) ))
       {
-        QString msg = "Could not remove temporary image " + removeList_.at(i) + " from harddrive.";
-        QMessageBox::warning( 0, "Warning", msg, "OK" );
+        QMessageBox::warning( 0, tr("Warning"), tr("Could not remove temporary image %1 from harddrive.").arg(removeList_.at(i)), "OK" );
       }
     }
   }
@@ -376,7 +398,7 @@ namespace IAEX
    * \author Ingemar Axelsson and Anders Fernström
    * \date 2006-05-03 (update)
    *
-   * \brief Open an file, and display the content of hte file
+   * \brief Open an file, and display the content of the file
    *
    * 2005-09-22 AF, added the filename to the NotebookWindow() call
    * 2005-10-11 AF, Porting, added resize call, so all cells get the
@@ -395,10 +417,6 @@ namespace IAEX
     // 2005-12-01 AF, Added try-catch
     try
     {
-      //2006-05-03 AF, during open, stop highlighter
-      HighlighterThread *thread = HighlighterThread::instance();
-      thread->setStop( true );
-
       //1. Create a new document.
       Document *d = new CellDocument( this, filename, readmode );
       add(d);
@@ -408,7 +426,7 @@ namespace IAEX
       DocumentView *v = new NotebookWindow(d, filename);
       add(v);
 
-      // 2006-01-31 AF, Open window minimized insted of normal
+      // 2006-01-31 AF, Open window minimized instead of normal
 
       //v->showMinimized();
 
@@ -423,16 +441,25 @@ namespace IAEX
 
       // 2006-01-31 AF, show window again
       v->show();
+      v->raise();  // for MacOS
+      v->activateWindow(); // for Windows
 
-      v->resize( 801, 600 ); //fjass
+      vector<DocumentView *> windowViews = documentViewList();
+      vector<DocumentView *>::iterator v_iter = windowViews.begin();
+      while( v_iter != windowViews.end() )
+      {
+        ((NotebookWindow *)*v_iter)->updateWindowMenu();
+        ++v_iter;
+      }
+
+      QDesktopWidget dw;
+      v->move(0, 0);
+      v->resize(dw.geometry().width(),dw.geometry().height());
 
       // 2005-11-30 AF, apply hide() and show() to closed groupcells
       // childs in the documentview
       UpdateGroupcellVisitor visitor;
       v->document()->runVisitor( visitor );
-
-      // 2006-05-03 AF, done, start highlighter again
-      thread->setStop( false );
     }
     catch( exception &e )
     {
@@ -445,7 +472,7 @@ namespace IAEX
   * \date 2006-01-16
   *
   * \brief Add filename to a list of temporary files that should
-  * be deleted when the applicaiton quits.
+  * be deleted when the application quits.
   */
   void CellApplication::removeTempFiles(QString filename)
   {
@@ -456,7 +483,7 @@ namespace IAEX
   * \author Anders Fernström
   * \date 2006-01-27
   *
-  * \brief returns list of all current doucment views
+  * \brief returns list of all current document views
   */
   vector<DocumentView *> CellApplication::documentViewList()
   {
@@ -494,6 +521,12 @@ namespace IAEX
       }
       else
         ++dv_iter;
+    }
+    dv_iter = views_.begin();
+    while( dv_iter != views_.end() )
+    {
+      ((NotebookWindow *)*dv_iter)->updateWindowMenu();
+      ++dv_iter;
     }
   }
 

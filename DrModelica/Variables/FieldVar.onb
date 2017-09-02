@@ -20,10 +20,10 @@ p, li { white-space: pre-wrap; }
 &lt;table border="0" style="-qt-table-type: root; margin-top:5px; margin-bottom:5px; margin-left:5px; margin-right:5px;">
 &lt;tr>
 &lt;td style="border: none;">
-&lt;p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">&lt;br />In the class &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">CelestialBody&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">radius&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">, &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">name&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> and &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">mass&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> are examples of fields/variables. Every object of the type &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">CelestialBody&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> has its own instances of these fields. Changing the mass field in one object will not affect the mass in another object.&lt;br />&lt;/span>&lt;/p>&lt;/td>&lt;/tr>&lt;/table>&lt;/body>&lt;/html></Text>
+&lt;p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">&lt;br />In the class &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">CelestialBody&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">radius&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">, &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">name&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> and &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">mass&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> are examples of fields/variables. Every object of the type &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">CelestialBody&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> has its own instances of these fields. Changing the &lt;/span>&lt;span style=" font-family:'Courier New'; font-size:12pt; color:#000000;">mass&lt;/span>&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;"> field in one object will not affect the mass in another object.&lt;br />&lt;/span>&lt;/p>&lt;/td>&lt;/tr>&lt;/table>&lt;/body>&lt;/html></Text>
       </TextCell>
       <GraphCell style="Graph" closed="false">
-        <Input>class CelestialBody
+        <Input>model CelestialBody
   constant Real g = 6.672e-11;
   parameter Real radius;
   parameter String name;
@@ -50,16 +50,14 @@ p, li { white-space: pre-wrap; }
 &lt;table border="0" style="-qt-table-type: root; margin-top:5px; margin-bottom:5px; margin-left:5px; margin-right:5px;">
 &lt;tr>
 &lt;td style="border: none;">
-&lt;p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">Duplicate field names is not allowed in class declarations. The name of a declared element must be different from the names of all other declared elements in the class.&lt;br />&lt;/span>&lt;/p>&lt;/td>&lt;/tr>&lt;/table>&lt;/body>&lt;/html></Text>
+&lt;p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">Duplicate field/variable names is not allowed in class declarations. The name of a declared element must be different from the names of all other declared elements in the class.&lt;br />&lt;/span>&lt;/p>&lt;/td>&lt;/tr>&lt;/table>&lt;/body>&lt;/html></Text>
         </TextCell>
         <GraphCell style="Graph" closed="false">
-          <Input>class IllegalDuplicate
+          <Input>model IllegalDuplicate
   parameter Real duplicate = 4.0;
   parameter Integer duplicate = 6;   // Error! Illegal duplicate field name.
 end IllegalDuplicate;</Input>
-          <Output>Error occured building AST
-Syntax Error
-[&lt;interactive>:2:3-2:33:writable] Error: An element with name duplicate is already declared in this scope.</Output>
+          <Output>{IllegalDuplicate}</Output>
         </GraphCell>
         <TextCell style="Text">
           <Text>&lt;!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0//EN" "http://www.w3.org/TR/REC-html40/strict.dtd">
@@ -97,8 +95,16 @@ p, li { white-space: pre-wrap; }
           <Input>simulate(IllegalDuplicate)
 </Input>
           <Output>record SimulationResult
-    messages = "Simulation Failed. Model: IllegalDuplicate does not exist! Please load it first before simulation."
-end SimulationResult;</Output>
+    resultFile = "",
+    messages = "Failed to build model: IllegalDuplicate"
+end SimulationResult;
+OMC-ERROR:
+"[&lt;interactive>:3:3-3:34:writable] Notification: From here:
+[&lt;interactive>:2:3-2:33:writable] Error: Duplicate elements (due to inherited elements) not identical:
+  first element is:  parameter Integer duplicate = 6
+  second element is: parameter Real duplicate = 4.0
+Error: Error occurred while flattening model IllegalDuplicate
+"</Output>
         </GraphCell>
       </GroupCell>
       <GroupCell closed="false">
@@ -150,13 +156,11 @@ p, li { white-space: pre-wrap; }
 &lt;p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">It is not allowed to have the same name of a field/variable and its type specifier.&lt;/span>&lt;/p>&lt;/td>&lt;/tr>&lt;/table>&lt;/body>&lt;/html></Text>
           </TextCell>
           <GraphCell style="Graph" closed="false">
-            <Input>class IllegalTypeAsField
+            <Input>model IllegalTypeAsField
   Voltage Voltage;   // Error!
   Voltage voltage;   // Legal, Voltage and voltage are two different names
 end IllegalTypeAsField;</Input>
-            <Output>Error occured building AST
-Syntax Error
-[&lt;interactive>:2:3-2:18:writable] Error: Found a component with same name when looking for type Voltage</Output>
+            <Output>{IllegalTypeAsField}</Output>
           </GraphCell>
         </GroupCell>
       </GroupCell>
@@ -185,7 +189,8 @@ p, li { white-space: pre-wrap; }
           <Input>instantiateModel( IllegalTypeAsField );</Input>
           <Output>
 OMC-ERROR: 
-"Error: Class IllegalTypeAsField not found in scope &lt;TOP>.
+"[&lt;interactive>:2:3-2:18:writable] Error: Found a component with same name when looking for type Voltage.
+Error: Error occurred while flattening model IllegalTypeAsField
 "</Output>
         </GraphCell>
         <GroupCell closed="false">
@@ -210,7 +215,7 @@ p, li { white-space: pre-wrap; }
 &lt;p style=" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;">&lt;span style=" font-family:'Times New Roman'; font-size:12pt; color:#000000;">By changing the name of the first field/variable to voltage1, we fix the problem.&lt;/span>&lt;/p>&lt;/td>&lt;/tr>&lt;/table>&lt;/body>&lt;/html></Text>
           </TextCell>
           <GraphCell style="Graph" closed="false">
-            <Input>class LegalVoltage
+            <Input>model LegalVoltage
   Voltage voltage1;  // Legal!
   Voltage voltage;   // Legal, Voltage and voltage are two different names
 end LegalVoltage;</Input>
@@ -223,15 +228,6 @@ end LegalVoltage;</Input>
   Real voltage(unit = \"V\");
 end LegalVoltage;
 "</Output>
-          </GraphCell>
-          <GraphCell style="Graph" closed="false">
-            <Input>simulate(LegalVoltage)</Input>
-            <Output>record SimulationResult
-    messages = "Simulation failed for model: LegalVoltage
-Error: Too few equations, underdetermined system. The model has 0 equation(s) and 2 variable(s)
-Error: Internal error Transformation Module omc index Reduction Method dummyDerivative failed!
-"
-end SimulationResult;</Output>
           </GraphCell>
         </GroupCell>
       </GroupCell>

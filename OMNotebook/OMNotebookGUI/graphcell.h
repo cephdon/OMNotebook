@@ -35,24 +35,28 @@
 
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QAction>
 #include <QtGui/QWidget>
 #include <QtGui/QTextBrowser>
-//Added by qt3to4:
 #include <QtGui/QMouseEvent>
 #include <QtGui/QGridLayout>
 #include <QtGui/QResizeEvent>
 #include <QtCore/QEvent>
 #include <QPushButton>
 #include <QTemporaryFile>
+#endif
+
 //IAEX Headers
 #include "cell.h"
 #include "inputcelldelegate.h"
-#include "syntaxhighlighter.h"
-//#include "highlighter.h"
 #include "document.h"
 //#include <QToolBar>
 #include "PlotWindow.h"
+#include "ModelicaTextHighlighter.h"
 
 class IndentationState;
 
@@ -61,6 +65,7 @@ namespace IAEX
   enum graphCellStates {Finished, Eval, Error, Modified};
 
   class MyTextEdit2;
+  class MyTextEdit2a;
   class GraphCell : public Cell
   {
     Q_OBJECT
@@ -96,7 +101,6 @@ namespace IAEX
 
   signals:
     void plotVariables(QStringList lst);
-    void heightChanged();
     void textChanged();
     void textChanged( bool );
     void clickedOutput( Cell* );          // Added 2006-02-03 AF
@@ -161,7 +165,8 @@ namespace IAEX
     int oldHeight_;                    // Added 2006-04-10 AF
 
   public:
-    MyTextEdit2* input_;
+    MyTextEdit2a* input_;
+    ModelicaTextHighlighter *mpModelicaTextHighlighter;
     QTextBrowser *output_;
   private:
     QTextBrowser *chaptercounter_;
@@ -186,7 +191,44 @@ namespace IAEX
     MyTextEdit2(QWidget *parent=0);
     virtual ~MyTextEdit2();
 
-    bool isStopingHighlighter();    // Added 2006-01-16 AF
+    int state;
+
+  public slots:
+    void updatePosition();
+    void setModified();
+    void setAutoIndent(bool);
+
+  signals:
+    void clickOnCell();          // Added 2005-11-01 AF
+    void wheelMove( QWheelEvent* );    // Added 2005-11-28 AF
+    void eval();            // Added 2005-12-15 AF
+    void forwardAction( int );      // Added 2006-04-27 AF
+    void updatePos(int, int);
+    void setState(int);
+    void showVariableButton(bool);
+
+  protected:
+    void mousePressEvent(QMouseEvent *event);      // Added 2005-11-01 AF
+    void wheelEvent(QWheelEvent *event);        // Added 2005-11-28 AF
+    void keyPressEvent(QKeyEvent *event );        // Added 2005-12-15 AF
+    void insertFromMimeData(const QMimeData *source);  // Added 2006-01-23 AF
+    void focusInEvent(QFocusEvent* event);
+
+  private:
+    bool inCommand;            // Added 2005-12-15 AF
+
+  };
+  //***************************************************
+  class MyTextEdit2a : public QPlainTextEdit
+  {
+    Q_OBJECT
+
+  public:
+    MyTextEdit2a(QWidget *parent=0);
+    virtual ~MyTextEdit2a();
+    void lineNumberAreaPaintEvent(QPaintEvent *event);
+    int lineNumberAreaWidth();
+
     int state;
 
   public slots:
@@ -196,6 +238,11 @@ namespace IAEX
     void indentText();
     bool lessIndented(QString);
     void setAutoIndent(bool);
+
+  private slots:
+    void updateLineNumberAreaWidth(int newBlockCount);
+    void highlightCurrentLine(bool highlight = true);
+    void updateLineNumberArea(const QRect &, int);
 
   signals:
     void clickOnCell();          // Added 2005-11-01 AF
@@ -215,13 +262,15 @@ namespace IAEX
     void keyPressEvent(QKeyEvent *event );        // Added 2005-12-15 AF
     void insertFromMimeData(const QMimeData *source);  // Added 2006-01-23 AF
     void focusInEvent(QFocusEvent* event);
+    void focusOutEvent(QFocusEvent* event);
+    void resizeEvent(QResizeEvent *event) override;
 
   private:
     bool inCommand;            // Added 2005-12-15 AF
-    bool stopHighlighter;        // Added 2006-01-16 AF
     int indentationLevel(QString, bool b=true);
     bool autoIndent;
     QMap<int, IndentationState*> indentationStates;
+    QWidget *lineNumberArea;
 
   };
 

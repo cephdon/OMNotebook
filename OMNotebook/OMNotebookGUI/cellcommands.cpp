@@ -38,9 +38,9 @@
  */
 
 // QT Headers
+#include <QObject>
 #include <QtGui/QTextCursor>
 #include <QtGui/QTextDocumentFragment>
-#include <QDebug>
 
 //STD Headers
 #include <exception>
@@ -50,6 +50,7 @@
 //IAEX Headers
 #include "cellcommands.h"
 #include "graphcell.h"
+#include "latexcell.h"
 #include "inputcell.h"
 #include "textcell.h"
 #include "cellgroup.h"
@@ -98,7 +99,7 @@ namespace IAEX
       }
 
       // 2005-11-21 AF, Added check if the current cell is a
-      // inputcell, set style to 'text' insted.
+      // inputcell, set style to 'text' instead.
       // 2006-02-03 AF, added check if the current cell is a
       // groupcell
       if( style.name() == "input" || style.name() == "Input" || style.name() == "ModelicaInput" ||
@@ -217,14 +218,14 @@ namespace IAEX
       }
       else
       {
-    document()->clearSelection(); //Notice
-    application()->clearPasteboard();
+        document()->clearSelection(); //Notice
+        application()->clearPasteboard();
 
-    vector<Cell *>::iterator i = cells.begin();
-    for(;i != cells.end();++i)
-    {
-      application()->addToPasteboard((*i));
-    }
+        vector<Cell *>::iterator i = cells.begin();
+        for(;i != cells.end();++i)
+        {
+          application()->addToPasteboard((*i));
+        }
       }
    }
 
@@ -248,7 +249,6 @@ namespace IAEX
    }
    else
    {
-
       document()->clearSelection(); //Notice
       application()->clearPasteboard();
 
@@ -287,7 +287,7 @@ namespace IAEX
   void PasteCellsCommand::execute()
   {
     try
-    {
+      {
       vector<Cell *> cells = application()->pasteboard();
 
       // Insert new cells before this position.
@@ -309,6 +309,10 @@ namespace IAEX
             throw e;
           }
         }
+      }
+      else
+      {
+        QMessageBox::warning( 0, QObject::tr("Warning"), QObject::tr("No cells in clipboard. To paste a cell, select the cells and perform copy."), "OK" );
       }
 
       //2006-01-18 AF, set docuement changed
@@ -423,6 +427,26 @@ namespace IAEX
         newGraphCell->setEvaluated( false );
 
       newGraphCell->setClosed( oldGraphCell->isClosed() );
+    }
+    else if( typeid(LatexCell) == typeid( *newCell ))
+    {
+      LatexCell *newLatexCell = dynamic_cast<LatexCell *>( newCell );
+      LatexCell *oldLatexCell = dynamic_cast<LatexCell *>( cell );
+
+      newLatexCell->setStyle( style );
+      newLatexCell->setTextHtml(oldLatexCell->textHtml());
+      if( oldLatexCell->isEvaluated() )
+      {
+        newLatexCell->setEvaluated(true);
+        //newLatexCell->setTextOutput( oldLatexCell->textOutput() );
+        newLatexCell->setTextOutputHtml(oldLatexCell->textOutputHtml());
+
+      }
+      else
+      {
+        newLatexCell->setEvaluated(false);
+      }
+      newLatexCell->setClosed( oldLatexCell->isClosed() );
     }
     else if( typeid(TextCell) == typeid( *newCell ))
     {

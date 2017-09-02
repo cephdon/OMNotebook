@@ -43,7 +43,13 @@
 #include <stdexcept>
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#include <QTextEdit>
+#else
 #include <QtGui/QTextEdit>
+#endif
 
 //IAEX Headers
 #include "cellgroup.h"
@@ -89,8 +95,6 @@ namespace IAEX{
     setMainWidget(main_);
 
     style_.setName( "cellgroup" );
-
-
   }
 
   /*!
@@ -314,7 +318,6 @@ namespace IAEX{
    */
   void CellGroup::mouseDoubleClickEvent(QMouseEvent *event)
   {
-    // PORT >>if(treeView()->hasMouse())
     if( treeView()->testAttribute(Qt::WA_UnderMouse) )
     {
       closed_ = !closed_;
@@ -438,7 +441,6 @@ namespace IAEX{
   //Just add widget. Don't forget to repaint.
   void CellGroup::addCellWidget(Cell *newCell)
   {
-    // PORT >> newCell->reparent(mainWidget(), QPoint(0,0), true);
     newCell->setParent( mainWidget() );
     newCell->move( QPoint(0,0) );
     newCell->show();
@@ -456,7 +458,6 @@ namespace IAEX{
 
     while(current != 0)
     {
-      // PORT >> layout_->remove(current);
       layout_->removeWidget(current);
 
       current = current->next();
@@ -472,7 +473,6 @@ namespace IAEX{
     {
       if(current->parentWidget() != mainWidget())
       {
-        // PORT >> current->reparent(mainWidget(), QPoint(0,0), true);
         current->setParent( mainWidget() );
         current->move( QPoint(0,0) );
         current->show();

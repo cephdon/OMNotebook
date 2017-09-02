@@ -43,9 +43,14 @@
 #include <stdexcept>
 
 //Qt Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QApplication>
 #include <QtGui/QLabel>
 #include <QtGui/QPaintEvent>
+#endif
 
 //IAEX Headers
 #include "cellcursor.h"
@@ -299,32 +304,13 @@ namespace IAEX
       // 2006-04-27 AF,
       cursorIsMoved();
 
-      //removeCurrentCell();
-
-      //OLD CODE
-      //Remove currentCell.
       Cell *current = previous(); //Save a pointer to the cell being deleted.
 
+      //Remove currentCell.
       removeCurrentCell();
-      // removeFromCurrentPosition();
-
-      //    if(current->hasPrevious())
-      //       current->previous()->setNext(this);
-      //    else
-      //       parentCell()->setChild(this);
-
-      //    setPrevious(current->previous());
-
-      //    current->setParentCell(0);
-      //    current->setPrevious(0);
-      //    current->setNext(0);
-      //    current->setChild(0);
-      //    current->setLast(0);
 
       //Segfault on delete.
       delete current;
-
-      //parentCell()->addCellWidgets();
     }
     // TMP EMIT
     emit changedPosition();

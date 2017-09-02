@@ -45,6 +45,10 @@
 #include <cmath>
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtCore/QDir>
 #include <QtCore/QEvent>
 #include <QtCore/QThread>
@@ -64,13 +68,13 @@
 #include <QTextStream>
 #include <QRegExp>
 #include <QPushButton>
+#endif
 
 //IAEX Headers
 #include "graphcell.h"
 #include "treeview.h"
 #include "stylesheet.h"
 #include "commandcompletion.h"
-#include "highlighterthread.h"
 #include "omcinteractiveenvironment.h"
 #include "indent.h"
 
@@ -79,23 +83,187 @@
 using namespace OMPlot;
 
 namespace IAEX {
+
   /*!
-  * \class SleeperThread
-  * \author Anders Ferström
+  * \class LineNumberArea
+  * \author Henning Kiel
+  * \date 2017-06-09
   *
-  * \brief Extends QThread. A small trick to get access to protected
-  * function in QThread.
+  * \brief From Qt example code to have a line number area in QPlainTextEdit class
   */
-  class SleeperThread : public QThread
+  class LineNumberArea : public QWidget
   {
   public:
-    static void msleep(unsigned long msecs)
-    {
-      QThread::msleep(msecs);
+    LineNumberArea(MyTextEdit2a *editor) : QWidget(editor) {
+      codeEditor = editor;
     }
+
+    QSize sizeHint() const override {
+      return QSize(codeEditor->lineNumberAreaWidth(), 0);
+    }
+
+  protected:
+    void paintEvent(QPaintEvent *event) override {
+      codeEditor->lineNumberAreaPaintEvent(event);
+    }
+
+  private:
+    MyTextEdit2a *codeEditor;
   };
 
+  /*!
+  * \class MyTextEdit2a
+  * \author Henning Kiel
+  * \date 2017-06-09
+  *
+  * \brief Extends QPlainTextEdit to catch user clicks on the editor,
+  * allow automatic indentation and show line numbers
+  */
+  MyTextEdit2a::MyTextEdit2a(QWidget *parent)
+    : QPlainTextEdit(parent),
+    inCommand(false),
+    autoIndent(true)
+  {
+    lineNumberArea = new LineNumberArea(this);
 
+    connect(this, SIGNAL(blockCountChanged(int)), this, SLOT(updateLineNumberAreaWidth(int)));
+    connect(this, SIGNAL(updateRequest(QRect,int)), this, SLOT(updateLineNumberArea(QRect,int)));
+    connect(this, SIGNAL(cursorPositionChanged()), this, SLOT(highlightCurrentLine()));
+
+    updateLineNumberAreaWidth(0);
+    highlightCurrentLine();
+  }
+
+  int MyTextEdit2a::lineNumberAreaWidth()
+  {
+    int digits = 1;
+    int max = qMax(1, blockCount());
+    // count digits
+    while (max >= 10) {
+        max /= 10;
+        ++digits;
+    }
+    int space = 3 + fontMetrics().width(QLatin1Char('9')) * digits;
+
+    return space;
+  }
+
+  void MyTextEdit2a::updateLineNumberAreaWidth(int /* newBlockCount */)
+  {
+    setViewportMargins(lineNumberAreaWidth(), 0, 0, 0);
+  }
+
+  void MyTextEdit2a::updateLineNumberArea(const QRect &rect, int dy)
+  {
+    if (dy) {
+      lineNumberArea->scroll(0, dy);
+    } else {
+      lineNumberArea->update(0, rect.y(), lineNumberArea->width(), rect.height());
+    }
+
+    if (rect.contains(viewport()->rect())) {
+      updateLineNumberAreaWidth(0);
+    }
+  }
+
+  void MyTextEdit2a::resizeEvent(QResizeEvent *e)
+  {
+    QPlainTextEdit::resizeEvent(e);
+
+    QRect cr = contentsRect();
+    lineNumberArea->setGeometry(QRect(cr.left(), cr.top(), lineNumberAreaWidth(), cr.height()));
+  }
+
+  void MyTextEdit2a::highlightCurrentLine(bool highlight)
+  {
+    QList<QTextEdit::ExtraSelection> extraSelections;
+
+    if (highlight && !isReadOnly() && blockCount() > 1) {
+      QTextEdit::ExtraSelection selection;
+
+      QColor lineColor = QColor(Qt::yellow).lighter(190);
+
+      selection.format.setBackground(lineColor);
+      selection.format.setProperty(QTextFormat::FullWidthSelection, true);
+      selection.cursor = textCursor();
+      selection.cursor.clearSelection();
+      extraSelections.append(selection);
+    }
+
+    setExtraSelections(extraSelections);
+  }
+
+  void MyTextEdit2a::lineNumberAreaPaintEvent(QPaintEvent *event)
+  {
+    QPainter painter(lineNumberArea);
+    painter.fillRect(event->rect(), Qt::lightGray);
+    QTextBlock block = firstVisibleBlock();
+    int blockNumber = block.blockNumber();
+    int top = (int) blockBoundingGeometry(block).translated(contentOffset()).top();
+    int bottom = top + (int) blockBoundingRect(block).height();
+    while (block.isValid() && top <= event->rect().bottom()) {
+      if (block.isVisible() && bottom >= event->rect().top()) {
+        QString number = QString::number(blockNumber + 1);
+        painter.setPen(Qt::black);
+        painter.drawText(0, top, lineNumberArea->width(), fontMetrics().height(), Qt::AlignRight, number);
+      }
+
+      block = block.next();
+      top = bottom;
+      bottom = top + (int) blockBoundingRect(block).height();
+      ++blockNumber;
+    }
+  }
+
+  MyTextEdit2a::~MyTextEdit2a()
+  {
+    for(QMap<int, IndentationState*>::iterator i = indentationStates.begin(); i != indentationStates.end(); ++i) {
+      delete i.value();
+    }
+  }
+
+  void MyTextEdit2a::mousePressEvent(QMouseEvent *event)
+  {
+    inCommand = false;
+    QPlainTextEdit::mousePressEvent(event);
+
+    if( event->modifiers() == Qt::ShiftModifier ||
+      textCursor().hasSelection() )
+    {
+      return;
+    }
+
+    emit clickOnCell();
+    updatePosition();
+    if(state != Error)
+      emit setState(Modified);
+    highlightCurrentLine();
+  }
+
+  void MyTextEdit2a::wheelEvent(QWheelEvent * event)
+  {
+    // ignore event and send it up in the event hierarchy
+    event->ignore();
+    emit wheelMove( event );
+  }
+
+  void MyTextEdit2a::focusInEvent(QFocusEvent* event)
+  {
+    emit undoAvailable(document()->isUndoAvailable());
+    emit redoAvailable(document()->isRedoAvailable());
+    setModified();
+    highlightCurrentLine(true);
+    QPlainTextEdit::focusInEvent(event);
+  }
+
+  void MyTextEdit2a::focusOutEvent(QFocusEvent* event)
+  {
+    emit undoAvailable(document()->isUndoAvailable());
+    emit redoAvailable(document()->isRedoAvailable());
+    setModified();
+    highlightCurrentLine(false);
+    QPlainTextEdit::focusOutEvent(event);
+  }
 
   /*!
   * \class MyTextEdit2
@@ -107,23 +275,12 @@ namespace IAEX {
   */
   MyTextEdit2::MyTextEdit2(QWidget *parent)
     : QTextBrowser(parent),
-    inCommand(false),
-    stopHighlighter(false), autoIndent(true)
+    inCommand(false)
   {
 
   }
-
   MyTextEdit2::~MyTextEdit2()
   {
-    for(QMap<int, IndentationState*>::iterator i = indentationStates.begin(); i != indentationStates.end(); ++i)
-    {
-      delete i.value();
-    }
-  }
-
-  bool MyTextEdit2::isStopingHighlighter()
-  {
-    return stopHighlighter;
   }
 
   /*!
@@ -139,7 +296,6 @@ namespace IAEX {
   */
   void MyTextEdit2::mousePressEvent(QMouseEvent *event)
   {
-    stopHighlighter = false;
     inCommand = false;
     QTextBrowser::mousePressEvent(event);
 
@@ -153,42 +309,9 @@ namespace IAEX {
     updatePosition();
     if(state != Error)
       emit setState(Modified);
-
-
   }
 
-  /*!
-  * \author Anders Fernström
-  * \date 2005-11-28
-  *
-  * \brief Handles mouse wheel events, ignore them and send the up
-  * in the cell hierarchy
-  */
-  void MyTextEdit2::wheelEvent(QWheelEvent * event)
-  {
-    // ignore event and send it up in the event hierarchy
-    event->ignore();
-    emit wheelMove( event );
-  }
-
-  void MyTextEdit2::focusInEvent(QFocusEvent* event)
-  {
-    emit undoAvailable(document()->isUndoAvailable());
-    emit redoAvailable(document()->isRedoAvailable());
-    setModified();
-    QTextBrowser::focusInEvent(event);
-  }
-  /*!
-  * \author Anders Fernström
-  * \date 2005-12-15
-  * \date 2006-01-30 (update)
-  *
-  * \brief Handles key event, check if command completion or eval,
-  * otherwise send them to the textbrowser
-  *
-  * 2006-01-30 AF, added ignore to 'Alt+Enter'
-  */
-  void MyTextEdit2::keyPressEvent(QKeyEvent *event )
+  void MyTextEdit2a::keyPressEvent(QKeyEvent *event )
   {
     emit showVariableButton(false);
     // EVAL, key: SHIFT + RETURN || SHIFT + ENTER
@@ -196,7 +319,6 @@ namespace IAEX {
       (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->accept();
       emit eval();
@@ -205,7 +327,6 @@ namespace IAEX {
     else if( (event->modifiers() == Qt::ShiftModifier && event->key() == Qt::Key_Backtab ) ||
       (event->modifiers() == Qt::ControlModifier && event->key() == Qt::Key_Space) )
     {
-      stopHighlighter = false;
 
       event->accept();
       if( inCommand )
@@ -218,11 +339,10 @@ namespace IAEX {
         emit command();
       }
     }
-    // COMMAND COMPLETION- NEXT FIELD, key: CTRL + TAB
-    else if( event->modifiers() == Qt::ControlModifier &&
-      event->key() == Qt::Key_Tab )
+    // COMMAND COMPLETION- NEXT FIELD, key: CTRL + TAB || SHIFT + SPACE
+    else if( (event->modifiers() == Qt::ControlModifier && event->key() == Qt::Key_Tab ) ||
+      (event->modifiers() == Qt::ShiftModifier && event->key() == Qt::Key_Space ) )
     {
-      stopHighlighter = false;
 
       event->accept();
       inCommand = false;
@@ -233,16 +353,14 @@ namespace IAEX {
       event->key() == Qt::Key_Delete )
     {
       inCommand = false;
-      stopHighlighter = true;
 
-      QTextBrowser::keyPressEvent( event );
+      QPlainTextEdit::keyPressEvent( event );
     }
     // ALT+ENTER (ignore)
     else if( event->modifiers() == Qt::AltModifier &&
       ( event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return ))
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
     }
@@ -250,7 +368,6 @@ namespace IAEX {
     else if( event->key() == Qt::Key_PageUp )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
     }
@@ -258,7 +375,6 @@ namespace IAEX {
     else if( event->key() == Qt::Key_PageDown )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
     }
@@ -267,7 +383,6 @@ namespace IAEX {
       event->key() == Qt::Key_C )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
       emit forwardAction( 1 );
@@ -277,7 +392,6 @@ namespace IAEX {
       event->key() == Qt::Key_X )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
       emit forwardAction( 2 );
@@ -287,32 +401,20 @@ namespace IAEX {
       event->key() == Qt::Key_V )
     {
       inCommand = false;
-      stopHighlighter = false;
 
       event->ignore();
       emit forwardAction( 3 );
     }
-    else if(event->modifiers() == Qt::ControlModifier && event->key() == Qt::Key_W)
-    {
-      inCommand = false;
-      stopHighlighter = false;
-      indentText();
-      event->ignore();
-      //      QTextBrowser::keyPressEvent( event );
-      //      update();
-
-    }
-
+    // CTRL+E: autoindent cell
     else if(event->modifiers() == Qt::ControlModifier && event->key() == Qt::Key_E)
     {
       inCommand = false;
-      stopHighlighter = false;
       indentText();
     }
+    // CTRL+K: kill text until EOL
     else if(event->modifiers() == Qt::ControlModifier && event->key() == Qt::Key_K)
     {
       inCommand = false;
-      stopHighlighter = true;
       QTextCursor tc(textCursor());
       int i = toPlainText().indexOf(QRegExp("\\n|$"), tc.position());
 
@@ -322,13 +424,12 @@ namespace IAEX {
         tc.setPosition(i +1, QTextCursor::KeepAnchor);
 
       tc.insertText("");
-      QTextBrowser::keyPressEvent( event );
+      QPlainTextEdit::keyPressEvent( event );
     }
     // TAB
     else if( event->key() == Qt::Key_Tab )
     {
       inCommand = false;
-      stopHighlighter = false;
       textCursor().insertText( "  " );
     }
     else if( event->key() == Qt::Key_Enter || event->key() == Qt::Key_Return )
@@ -376,26 +477,167 @@ namespace IAEX {
           t.setPosition(t.block().position() + t.block().length() -1);
         }
 
-        QTextBrowser::keyPressEvent(event);
+        QPlainTextEdit::keyPressEvent(event);
         t.insertText(QString(2*i.level(), ' '));
       }
       else
-        QTextBrowser::keyPressEvent(event);
+        QPlainTextEdit::keyPressEvent(event);
     }
     else
     {
       inCommand = false;
-      stopHighlighter = false;
+      QPlainTextEdit::keyPressEvent( event );
+    }
+
+    updatePosition();
+  }
+
+  void MyTextEdit2a::setAutoIndent(bool b)
+  {
+    autoIndent = b;
+  }
+
+  void MyTextEdit2a::setModified()
+  {
+    emit setState(Modified);
+  }
+
+  void MyTextEdit2a::updatePosition()
+  {
+    int pos = textCursor().position();
+    int row = toPlainText().left(pos).count("\n") +1;
+    int col = pos - toPlainText().left(pos).lastIndexOf("\n");
+    emit updatePos(row, col);
+  }
+
+  bool MyTextEdit2a::lessIndented(QString s)
+  {
+    QRegExp l("\\b(equation|algorithm|public|protected|else|elseif)\\b");
+    return s.indexOf(l) >= 0;
+  }
+
+  void MyTextEdit2a::indentText()
+  {
+    Indent a(toPlainText());
+    setPlainText(a.indentedText(&indentationStates));
+
+    int i = 1;
+    for(QTextBlock b =this->document()->begin(); b != this->document()->end(); b = b.next())
+    {
+      b.setUserState(++i);
+    }
+    emit textChanged();
+  }
+
+  void MyTextEdit2a::insertFromMimeData(const QMimeData *source)
+  {
+    if( source->hasText() )
+    {
+      QMimeData *newSource = new QMimeData();
+      newSource->setText( source->text() );
+      QPlainTextEdit::insertFromMimeData( newSource );
+      delete newSource;
+    }
+    else
+      QPlainTextEdit::insertFromMimeData( source );
+
+    updatePosition();
+    if(state != Error)
+      emit setState(Modified);
+  }
+
+  void MyTextEdit2a::goToPos(const QUrl& u)
+  {
+    QRegExp e("\\-|:");
+    int r=u.toString().section(e, 0,0).toInt();
+    int c=u.toString().section(e, 1,1).toInt();
+    int r2=u.toString().section(e, 2,2).toInt();
+    int c2=u.toString().section(e, 3,3).toInt();
+
+    int p = 0;
+    for(int i = 1; i < r; ++i)
+      p = toPlainText().indexOf("\n", p)+1;
+    p += (c-1);
+
+    QTextCursor tc(textCursor());
+    tc.setPosition(p);
+
+    int p2 = 0;
+    if(r2 > 0)
+    {
+      for(int i = 1; i < r2; ++i)
+        p2 = toPlainText().indexOf("\n", p2)+1;
+      p2 += (c2-1);
+      tc.setPosition(p2, QTextCursor::KeepAnchor);
+    }
+    setTextCursor(tc);
+    updatePos(r, c);
+    setFocus(Qt::MouseFocusReason);
+  }
+
+  /*!
+  * \author Anders Fernström
+  * \date 2005-11-28
+  *
+  * \brief Handles mouse wheel events, ignore them and send the up
+  * in the cell hierarchy
+  */
+  void MyTextEdit2::wheelEvent(QWheelEvent * event)
+  {
+    // ignore event and send it up in the event hierarchy
+    event->ignore();
+    emit wheelMove( event );
+  }
+  void MyTextEdit2::focusInEvent(QFocusEvent* event)
+  {
+    emit undoAvailable(document()->isUndoAvailable());
+    emit redoAvailable(document()->isRedoAvailable());
+    setModified();
+    QTextBrowser::focusInEvent(event);
+  }
+
+  /*!
+  * \author Anders Fernström
+  * \date 2005-12-15
+  * \date 2006-01-30 (update)
+  *
+  * \brief Handles key event, check if command completion or eval,
+  * otherwise send them to the textbrowser
+  *
+  * 2006-01-30 AF, added ignore to 'Alt+Enter'
+  */
+  void MyTextEdit2::keyPressEvent(QKeyEvent *event )
+  {
+    emit showVariableButton(false);
+    // EVAL, key: SHIFT + RETURN || SHIFT + ENTER
+    if( event->modifiers() == Qt::ShiftModifier &&
+      (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) )
+    {
+      inCommand = false;
+
+      event->accept();
+      emit eval();
+    }
+    // CTRL+C
+    else if( event->modifiers() == Qt::ControlModifier &&
+      event->key() == Qt::Key_C )
+    {
+      inCommand = false;
+
+      event->ignore();
+      emit forwardAction( 1 );
+    }
+    else
+    {
+      inCommand = false;
       QTextBrowser::keyPressEvent( event );
     }
 
     updatePosition();
-
   }
 
   void MyTextEdit2::setAutoIndent(bool b)
   {
-    autoIndent = b;
   }
 
   void MyTextEdit2::setModified()
@@ -435,36 +677,6 @@ namespace IAEX {
     if(state != Error)
       emit setState(Modified);
   }
-
-  void MyTextEdit2::goToPos(const QUrl& u)
-  {
-    QRegExp e("\\-|:");
-    int r=u.toString().section(e, 0,0).toInt();
-    int c=u.toString().section(e, 1,1).toInt();
-    int r2=u.toString().section(e, 2,2).toInt();
-    int c2=u.toString().section(e, 3,3).toInt();
-
-    int p = 0;
-    for(int i = 1; i < r; ++i)
-      p = toPlainText().indexOf("\n", p)+1;
-    p += (c-1);
-
-    QTextCursor tc(textCursor());
-    tc.setPosition(p);
-
-    int p2 = 0;
-    if(r2 > 0)
-    {
-      for(int i = 1; i < r2; ++i)
-        p2 = toPlainText().indexOf("\n", p2)+1;
-      p2 += (c2-1);
-      tc.setPosition(p2, QTextCursor::KeepAnchor);
-    }
-    setTextCursor(tc);
-    updatePos(r, c);
-    setFocus(Qt::MouseFocusReason);
-  }
-
   void MyAction::triggered2()
   {
     emit urlClicked(QUrl(text()));
@@ -540,26 +752,6 @@ namespace IAEX {
   */
   GraphCell::~GraphCell()
   {
-    //2006-01-05 AF, check if input texteditor is in the highlighter,
-    //if it is - wait for 60 ms and check again.
-    HighlighterThread *thread = HighlighterThread::instance();
-    int sleepTime = 0;
-    bool firstTime = true;
-    while( thread->haveEditor( input_ ) )
-    {
-      if( firstTime )
-      {
-        thread->removeEditor( input_ );
-        firstTime = false;
-      }
-
-      SleeperThread::msleep( 60 );
-      sleepTime++;
-
-      if( sleepTime > 100 )
-        break;
-    }
-
     delete mpPlotWindow;
     delete input_;
     delete output_;
@@ -584,9 +776,10 @@ namespace IAEX {
   */
   void GraphCell::createGraphCell()
   {
-    input_ = new MyTextEdit2( mainWidget() );
+    input_ = new MyTextEdit2a( mainWidget() );
+    mpModelicaTextHighlighter = new ModelicaTextHighlighter(input_->document());
     variableButton = new QPushButton("D",input_);
-    variableButton->setToolTip("New simulation data available");
+    variableButton->setToolTip(tr("New simulation data available"));
 
     variableButton->setMaximumWidth(25);
     layout_->addWidget( input_, 1, 1 );
@@ -598,7 +791,7 @@ namespace IAEX {
     input_->setReadOnly( true );
     input_->setUndoRedoEnabled( true );
     input_->setFrameShape( QFrame::Box );
-    input_->setAutoFormatting( QTextEdit::AutoNone );
+//    input_->setAutoFormatting( QTextEdit::AutoNone );
 
     input_->setHorizontalScrollBarPolicy( Qt::ScrollBarAlwaysOff );
     input_->setVerticalScrollBarPolicy( Qt::ScrollBarAlwaysOff );
@@ -623,8 +816,8 @@ namespace IAEX {
     //2005-12-29 AF
     connect( input_, SIGNAL( textChanged() ), this, SLOT( addToHighlighter() ));
     // 2006-01-17 AF, new...
-    connect( input_, SIGNAL( currentCharFormatChanged(const QTextCharFormat &) ),
-      this, SLOT( charFormatChanged(const QTextCharFormat &) ));
+    //connect( input_, SIGNAL( currentCharFormatChanged(const QTextCharFormat &) ),
+    //  this, SLOT( charFormatChanged(const QTextCharFormat &) ));
     // 2006-04-27 AF,
     connect( input_, SIGNAL( forwardAction(int) ), this, SIGNAL( forwardAction(int) ));
 
@@ -692,40 +885,6 @@ namespace IAEX {
       mpPlotWindow->hide();
   }
 
-  bool MyTextEdit2::lessIndented(QString s)
-  {
-    QRegExp l("\\b(equation|algorithm|public|protected|else|elseif)\\b");
-    return s.indexOf(l) >= 0;
-  }
-
-  int MyTextEdit2::indentationLevel(QString s, bool includeNegative)
-  {
-    QRegExp e1("\\b(model|class|type|connector|block|record|function|record|for|when|package|if)\\b");
-    QRegExp e1b("end\\s+(model|class|type|connector|block|record|function|record|for|when|package|if)\\b");
-    QRegExp e2("\\b(end|then)\\b");
-
-    QRegExp newLineEnd("^end\\b");
-
-    //    return s.count(e1) - includeNegative?(s.count(e2) + s.count(e1b)):0;
-    if(includeNegative)
-      return s.count(e1) - s.count(e2) - s.count(e1b);// - s.count(lessIndented);
-    else
-      return s.count(e1) - s.count(e1b);//- s.count(lessIndented);
-  }
-
-  void MyTextEdit2::indentText()
-  {
-    Indent a(toPlainText());
-    setText(a.indentedText(&indentationStates));
-
-    int i = 1;
-    for(QTextBlock b =this->document()->begin(); b != this->document()->end(); b = b.next())
-    {
-      b.setUserState(++i);
-    }
-    emit textChanged();
-  }
-
   /*!
   * \author Anders Fernström
   * \date 2006-04-21
@@ -749,8 +908,7 @@ namespace IAEX {
     else
     {
       // 2006-01-30 AF, add message box
-      QString msg = "No Output style defened, please define a Output style in stylesheet.xml";
-      QMessageBox::warning( 0, "Warning", msg, "OK" );
+      QMessageBox::warning( 0, tr("Warning"), tr("No Output style defined, please define an Output style in stylesheet.xml"), "OK" );
     }
 
     QTextCursor cursor = output_->textCursor();
@@ -804,7 +962,16 @@ namespace IAEX {
   */
   QString GraphCell::textHtml()
   {
-    return input_->toHtml();
+    Stylesheet *sheet = Stylesheet::instance( "stylesheet.xml" );
+    CellStyle style = sheet->getStyle( "Input" );
+
+    QTextEdit te;
+    te.setPlainText(input_->toPlainText());
+    te.selectAll();
+    te.mergeCurrentCharFormat( (*style_.textCharFormat()) );
+    te.document()->rootFrame()->setFrameFormat( (*style_.textFrameFormat()) );
+
+    return te.toHtml();
   }
 
   /*!
@@ -859,7 +1026,7 @@ namespace IAEX {
   */
   QTextEdit *GraphCell::textEdit()
   {
-    return input_;
+    return (QTextEdit*)input_;
   }
 
   /*!
@@ -893,7 +1060,7 @@ namespace IAEX {
   void GraphCell::setText(QString text)
   {
     // 2005-12-16 AF, block signals
-    input_->document()->blockSignals(true);
+    bool state = input_->document()->blockSignals(true);
 
     // 2005-10-04 AF, added some code to replace/remove
     QString tmp = text.replace("<br>", "\n");
@@ -928,7 +1095,7 @@ namespace IAEX {
 
 
     // 2005-12-16 AF, unblock signals and tell highlighter to highlight
-    input_->document()->blockSignals(false);
+    input_->document()->blockSignals(state);
     contentChanged();
   }
 
@@ -945,7 +1112,7 @@ namespace IAEX {
   */
   void GraphCell::setTextHtml(QString html)
   {
-    input_->setHtml( html );
+    input_->setPlainText( html );
     setStyle( style_ );
 
     contentChanged();
@@ -1031,7 +1198,7 @@ namespace IAEX {
       // select all the text
       input_->selectAll();
       // set the new style settings
-      input_->setAlignment( (Qt::AlignmentFlag)style_.alignment() );
+//      input_->setAlignment( (Qt::AlignmentFlag)style_.alignment() );
       input_->mergeCurrentCharFormat( (*style_.textCharFormat()) );
       input_->document()->rootFrame()->setFrameFormat( (*style_.textFrameFormat()) );
       // unselect the text
@@ -1123,7 +1290,7 @@ namespace IAEX {
   {
     try
     {
-      if( readonly )
+        if( readonly )
       {
         QTextCursor cursor = input_->textCursor();
         cursor.clearSelection();
@@ -1235,12 +1402,12 @@ namespace IAEX {
   */
   void GraphCell::contentChanged()
   {
-    int height = input_->document()->documentLayout()->documentSize().toSize().height();
+    int lineCount = input_->document()->lineCount() + 1;
+    QFontMetrics fm(input_->font());
+    int lineSpacing = fm.lineSpacing();
+    int height = lineCount * lineSpacing;
 
-    if( height < 0 ) height = 30;
-
-    // add a little extra, just in case /AF
-    input_->setMinimumHeight( height );
+    input_->setMinimumHeight(height);
 
     if( evaluated_ && !closed_ )
     {
@@ -1367,7 +1534,7 @@ namespace IAEX {
     }
     catch (PlotException &e)
     {
-      QMessageBox::warning( 0, "Error", e.what(), "OK" );
+      QMessageBox::warning( 0, tr("Error"), e.what(), "OK" );
     }
   }
 
@@ -1459,6 +1626,7 @@ namespace IAEX {
   {
     QString res   = delegate->getResult();
     QString error = delegate->getError();
+    int errorLevel= delegate->getErrorLevel();
 
     //delete sender();
     guard->unlock();
@@ -1477,14 +1645,27 @@ namespace IAEX {
     else
       setState(Finished);
 
+#if 0
     QRegExp e("([\\d]+:[\\d]+-[\\d]+:[\\d]+)|([\\d]+:[\\d]+)");
 
     // bool b;
     int p=0;
+#endif
 
     output_->selectAll();
     output_->textCursor().insertText( res );
 
+    QPalette pal = output_->palette(); // define palette for textEdit.
+    if (errorLevel >= 2) {
+      pal.setColor(QPalette::Base, QColor(0xff,0xe0,0xe0));
+    } else if (errorLevel == 1) {
+      pal.setColor(QPalette::Base, QColor(0xff,0xff,0xe0));
+    } else {
+      pal.setColor(QPalette::Base, Qt::white);
+    }
+    output_->setPalette(pal);
+
+#if 0
     QList<QAction*> actions;
     while((p=res.indexOf(e, p)) > 0)
     {
@@ -1529,6 +1710,7 @@ namespace IAEX {
       }
     }
     emit setStatusMenu(actions);
+#endif
 
     ++numEvals_;
     contentChanged();
@@ -1550,16 +1732,16 @@ namespace IAEX {
     switch(state_)
     {
     case Modified:
-      emit newState("Ready");
+      emit newState(tr("Ready"));
       break;
     case Eval:
-      emit newState("Evaluating...");
+      emit newState(tr("Evaluating..."));
       break;
     case Finished:
-      emit newState("Done");
+      emit newState(tr("Done"));
       break;
     case Error:
-      emit newState("Error");
+      emit newState(tr("Error"));
       break;
     }
   }
@@ -1576,8 +1758,10 @@ namespace IAEX {
     CommandCompletion *commandcompletion = CommandCompletion::instance( "commands.xml" );
     QTextCursor cursor = input_->textCursor();
 
-    if( commandcompletion->insertCommand( cursor ))
+    if( commandcompletion->insertCommand( cursor )) {
       input_->setTextCursor( cursor );
+      emit newState(commandcompletion->helpCommand().toLatin1().data());
+    }
   }
 
   /*!
@@ -1589,12 +1773,14 @@ namespace IAEX {
   */
   void GraphCell::nextCommand()
   {
-    qDebug("Next Command");
+    //qDebug("Next Command");
     CommandCompletion *commandcompletion = CommandCompletion::instance( "commands.xml" );
     QTextCursor cursor = input_->textCursor();
 
-    if( commandcompletion->nextCommand( cursor ))
+    if( commandcompletion->nextCommand( cursor )) {
       input_->setTextCursor( cursor );
+      emit newState(commandcompletion->helpCommand().toLatin1().data());
+    }
   }
 
   /*!
@@ -1605,7 +1791,7 @@ namespace IAEX {
   */
   void GraphCell::nextField()
   {
-    qDebug("Next Field");
+    //qDebug("Next Field");
     CommandCompletion *commandcompletion = CommandCompletion::instance( "commands.xml" );
     QTextCursor cursor = input_->textCursor();
 
@@ -1625,21 +1811,7 @@ namespace IAEX {
   */
   void GraphCell::addToHighlighter()
   {
-    //    QMessageBox::information(0, "uu3", "addToHighlighter");
     emit textChanged(true);
-    if( input_->toPlainText().isEmpty() )
-      return;
-
-    // 2006-01-16 AF, Don't add the text editor if MyTextEdit2
-    // don't allow it. MyTextEdit2 says no if the user removes
-    // text (backspace or delete).
-    if( dynamic_cast<MyTextEdit2 *>(input_)->isStopingHighlighter() )
-      return;
-
-    //    QMessageBox::information(0,"uu3", "add2");
-
-    HighlighterThread *thread = HighlighterThread::instance();
-    thread->addEditor( input_ );
   }
 
   /*!
@@ -1655,7 +1827,7 @@ namespace IAEX {
     //if( input_->toPlainText().isEmpty() )
     //{
     input_->blockSignals( true );
-    input_->setAlignment( (Qt::AlignmentFlag)style_.alignment() );
+//    input_->setAlignment( (Qt::AlignmentFlag)style_.alignment() );
     input_->mergeCurrentCharFormat( (*style_.textCharFormat()) );
     input_->document()->rootFrame()->setFrameFormat( (*style_.textFrameFormat()) );
     input_->blockSignals( false );

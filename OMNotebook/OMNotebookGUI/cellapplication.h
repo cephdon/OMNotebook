@@ -34,8 +34,24 @@
 #define _CELLAPPLICATION_H
 
 // QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#include <QPrinter>
+#include <QPrintDialog>
+#include <QtWebKitWidgets>
+#include <QTextCodec>
+#include <QUrlQuery>
+#include <QItemDelegate>
+#include <QMessageBox>
+#include <QImageWriter>
+#else
 #include <QtGui/QApplication>
-#include <QtCore/QObject>
+#include <QtGui/QImageWriter>
+#include <QtGui/QMessageBox>
+#include <QtCore/QDir>
+#endif
+#include <QTranslator>
 
 // IAEX Headers
 #include "application.h"
@@ -70,9 +86,12 @@ namespace IAEX
     void removeDocumentView( DocumentView *view );  // Added 2006-01-27 AF
     QApplication* getApplication() { return app_; }
     QWidget* getMainWindow() { return mainWindow; }
+    bool FileOpenEventTriggered = false;  // for startup only
 
   private:
     void convertDrModelica();            // Added 2006-03-21 AF
+    QTranslator translator;
+    QTranslator qtTranslator;
 
   private:
     QApplication *app_;

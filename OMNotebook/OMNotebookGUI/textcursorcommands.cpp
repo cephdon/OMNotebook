@@ -39,6 +39,10 @@
  */
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtCore/QDir>
 #include <QtGui/QMessageBox>
 #include <QtGui/QTextCursor>
@@ -46,6 +50,7 @@
 #include <QtGui/QTextEdit>
 #include <QtGui/QTextFrame>
 #include <QVariant>
+#endif
 
 #include <exception>
 #include <stdexcept>
@@ -56,6 +61,7 @@
 #include "cellcursor.h"
 #include "inputcell.h"
 #include "graphcell.h"
+#include "latexcell.h"
 
 
 namespace IAEX
@@ -93,6 +99,18 @@ namespace IAEX
         }
         else
           graphcell->textEdit()->cut();
+      }
+
+      else if( typeid(LatexCell) == typeid(*cell) )
+      {
+        LatexCell *latexcell = dynamic_cast<LatexCell*>(cell);
+        if( latexcell->textEditOutput()->hasFocus() &&
+          latexcell->isEvaluated() )
+        {
+          latexcell->textEditOutput()->cut();
+        }
+        else
+          latexcell->textEdit()->cut();
       }
 
 
@@ -142,6 +160,17 @@ namespace IAEX
         else
           graphcell->textEdit()->copy();
       }
+      else if( typeid(LatexCell) == typeid(*cell) )
+      {
+        LatexCell *latexcell = dynamic_cast<LatexCell*>(cell);
+        if( latexcell->textEditOutput()->hasFocus() &&
+          latexcell->isEvaluated() )
+        {
+          latexcell->textEditOutput()->copy();
+        }
+        else
+          latexcell->textEdit()->copy();
+      }
       else
       {
         QTextEdit *editor = cell->textEdit();
@@ -163,11 +192,38 @@ namespace IAEX
      */
   void TextCursorPasteText::execute()
   {
-    QTextEdit *editor = document()->getCursor()->currentCell()->textEdit();
+      Cell *cell = document()->getCursor()->currentCell();
+      if( cell )
+      {
+        if( typeid(LatexCell) == typeid(*cell) )
+        {
+          LatexCell *latexcell = dynamic_cast<LatexCell*>(cell);
+          if( latexcell->textEditOutput()->hasFocus() &&
+            latexcell->isEvaluated() )
+          {
+            latexcell->textEditOutput()->paste();
+          }
+          else
+          {
+            latexcell->textEdit()->paste();
+          }
+        }
+        else
+        {
+          QTextEdit *editor = cell->textEdit();
+          if( editor )
+          {
+            editor->paste();
+          }
+        }
+
+      }
+
+  /*  QTextEdit *editor = document()->getCursor()->currentCell()->textEdit();
     if( editor )
     {
       editor->paste();
-    }
+    }*/
   }
 
 
@@ -314,8 +370,7 @@ namespace IAEX
         if( oldStretch == cursor.charFormat().font().stretch() )
         {
           // 2006-01-30 AF, add message box
-          QString msg = "QT was unable to stretch the font";
-          QMessageBox::warning( 0, "Warning", msg, "OK" );
+          QMessageBox::warning( 0, QObject::tr("Warning"), QObject::tr("QT was unable to stretch the font"), "OK" );
         }
       }
     }

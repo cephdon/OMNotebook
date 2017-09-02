@@ -35,12 +35,18 @@
 #include <stdexcept>
 
 //QT Headers
-#include <QtCore/QDebug>
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtCore/QDir>
+#include <QtCore/QLocale>
 #include <QtCore/QProcess>
 #include <QtCore/QThread>
 #include <QtCore/QMutex>
+#include <QtCore/QSettings>
 #include <QtGui/QMessageBox>
+#endif
 
 //IAEX Headers
 #include "omcinteractiveenvironment.h"
@@ -65,16 +71,6 @@ using namespace std;
 
 namespace IAEX
 {
-  class SleeperThread : public QThread
-  {
-  public:
-    static void msleep(unsigned long msecs)
-    {
-      QThread::msleep(msecs);
-    }
-  };
-
-
   OmcInteractiveEnvironment* OmcInteractiveEnvironment::selfInstance = NULL;
   OmcInteractiveEnvironment* OmcInteractiveEnvironment::getInstance()
   {
@@ -91,16 +87,26 @@ namespace IAEX
   */
   OmcInteractiveEnvironment::OmcInteractiveEnvironment():result_(""),error_("")
   {
+    // set the language by reading the OMEdit settings file.
+    QSettings settings(QSettings::IniFormat, QSettings::UserScope, "openmodelica", "omedit");
+    QLocale settingsLocale = QLocale(settings.value("language").toString());
+    settingsLocale = settingsLocale.name() == "C" ? settings.value("language").toLocale() : settingsLocale;
+    void *args = mmc_mk_nil();
+    QString locale = "+locale=" + settingsLocale.name();
+    args = mmc_mk_cons(mmc_mk_scon(locale.toStdString().c_str()), args);
+    // initialize threadData
     threadData_t *threadData = (threadData_t *) calloc(1, sizeof(threadData_t));
     void *st = 0;
     MMC_TRY_TOP_INTERNAL()
-    omc_Main_init(threadData, mmc_mk_nil());
+    omc_Main_init(threadData, args);
     st = omc_Main_readSettings(threadData, mmc_mk_nil());
     MMC_CATCH_TOP()
     threadData_ = threadData;
     symbolTable_ = st;
     threadData_->plotClassPointer = 0;
     threadData_->plotCB = 0;
+    // set the +d=initialization flag default.
+    evalExpression(QString("setCommandLineOptions(\"+d=initialization\")"));
 #ifdef WIN32
     evalExpression(QString("getInstallationDirectoryPath()"));
     QString result = getResult();
@@ -131,6 +137,17 @@ namespace IAEX
   QString OmcInteractiveEnvironment::getError()
   {
     return error_;
+  }
+
+  /*!
+   * \author Hennning Kiel
+   * \date 2017-05-24
+   *
+   *\brief Method to get error message severity from OMC
+   */
+  int OmcInteractiveEnvironment::getErrorLevel()
+  {
+    return severity;
   }
 
   // QMutex omcMutex;
@@ -166,14 +183,24 @@ namespace IAEX
     error_ = MMC_STRINGDATA(reply_str);
     error_ = error_.trimmed();
     if( error_.size() > 2 ) {
-      error_ = QString( "OMC-ERROR: \n" ) + error_;
+      if (error_.contains("Error:")) {
+        severity = 2;
+        error_ = QString( "OMC-ERROR: \n" ) + error_;
+      } else if (error_.contains("Warning:")) {
+        severity = 1;
+        error_ = QString( "OMC-WARNING: \n" ) + error_;
+      } else {
+        severity = 0;
+      }
     } else { // no errors, clear the error.
       error_.clear();
+      severity = 0;
     }
 
     MMC_ELSE()
       result_ = "";
       error_ = "";
+      severity = 3;
       fprintf(stderr, "Stack overflow detected and was not caught.\nSend us a bug report at https://trac.openmodelica.org/OpenModelica/newticket\n    Include the following trace:\n");
       printStacktraceMessages();
       fflush(NULL);
@@ -204,7 +231,7 @@ namespace IAEX
     catch( exception &e )
     {
       e.what();
-      QMessageBox::critical( 0, "OMC Error", "Unable to get OMC version, OMC is not started." );
+      QMessageBox::critical( 0, QObject::tr("OMC Error"), QObject::tr("Unable to get OMC version, OMC is not started.") );
     }
 
     return version;

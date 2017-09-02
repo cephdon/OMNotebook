@@ -35,7 +35,13 @@
 #include <iostream>
 
 //QT Headers
+#include <QtGlobal>
+#include <QObject>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QMessageBox>
+#endif
 
 //IAEX Headers
 #include "cellcommandcenter.h"
@@ -81,13 +87,11 @@ namespace IAEX
 
       if( 0 <= msg.indexOf( "OpenFileCommand()", 0, Qt::CaseInsensitive ))
       {
-        msg += QString("\r\n\r\nIf you are trying to open an old ") +
-          QString("OMNotebook file, use menu 'File->Import->") +
-          QString("Old OMNotebook file' instead.");
+        msg += QString("\r\n\r\n")+QObject::tr("If you are trying to open an old OMNotebook file, use menu 'File->Import->Old OMNotebook file' instead.");
       }
 
       // display message box
-      QMessageBox::warning( 0, "Warning", msg, "OK" );
+      QMessageBox::warning( 0, QObject::tr("Warning"), msg, "OK" );
     }
   }
 
@@ -113,4 +117,3 @@ namespace IAEX
       }
    }
 }
-

@@ -33,12 +33,17 @@
 //STD Headers
 
 //QT Headers
+#include <QtGlobal>
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 0, 0))
+#include <QtWidgets>
+#else
 #include <QtGui/QGridLayout>
 #include <QtGui/QLabel>
 #include <QtGui/QMessageBox>
 #include <QtGui/QMouseEvent>
 #include <QtGui/QResizeEvent>
 #include <QtGui/QTextCursor>
+#endif
 
 #include <exception>
 #include <stdexcept>
@@ -282,7 +287,7 @@ namespace IAEX
       }
       else if( r->attribute() == "TextAlignment" )
       {
-        QRegExp textalignment( "Right|Left|Center" );
+        QRegExp textalignment( "Right|Left|Center|Justify" );
         if( 0 > r->value().indexOf( textalignment ))
           cout << "[NEW] Rule Value <TextAlignment>, VALUE: " << r->value().toStdString() << endl;
       }
